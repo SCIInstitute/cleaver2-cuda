@@ -1,0 +1,14 @@
+.cpro*
+.pro*
+lib
+bin
+CMake*
+cmake*
+*.nrrd
+*.ele
+*.node
+cli
+gui
+Makefile
+include
+
