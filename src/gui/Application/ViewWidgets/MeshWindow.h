@@ -65,6 +65,7 @@ class MeshWindow : public QGLWidget
   bool facesVisible(){ return m_bShowFaces; }
   bool edgesVisible(){ return m_bShowEdges; }
   bool cutsVisible(){ return m_bShowCuts; }
+  size_t max_mat() { return max_mat_; }
 
   bool getMaterialFaceLock(int m) const { return m_bMaterialFaceLock[m]; }
   bool getMaterialCellLock(int m) const { return m_bMaterialCellLock[m]; }

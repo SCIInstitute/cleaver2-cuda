@@ -19,6 +19,7 @@ class DataManager : public QObject
 
   void addField(Cleaver::AbstractScalarField *field);
   void removeField(Cleaver::AbstractScalarField *field);
+  void clearFields();
 
   void addVolume(Cleaver::Volume *volume);
   void addTansitionMesh(std::vector<std::array<float,3>> &verts,

@@ -43,6 +43,29 @@ void DataManager::addField(Cleaver::AbstractScalarField *field)
   emit fieldListChanged();
 }
 
+void DataManager::clearFields()
+{
+  std::vector<Cleaver::AbstractScalarField*>::iterator iter;
+  while (m_fields.size() > 0) {
+    for(iter = m_fields.begin(); iter != m_fields.end(); iter++)
+    {
+      // remove field if there's a match
+      if(*iter == m_fields[0]){
+        iter = m_fields.erase(iter);
+
+        // make sure we're not at the end
+        if(iter == m_fields.end())
+          break;
+      }
+    }
+  }
+
+  emit dataChanged();
+  emit dataRemoved();
+  emit fieldRemoved();
+  emit fieldListChanged();
+  emit volumeListChanged();
+}
 void DataManager::removeField(Cleaver::AbstractScalarField *field)
 {
   std::vector<Cleaver::AbstractScalarField*>::iterator iter;
@@ -104,17 +127,11 @@ void DataManager::addTansitionMesh(
     std::array<size_t,3> dims) {
   verts_.clear();
   faces_.clear();
+  clearFields();
+  Cleaver::FloatField ff(nullptr,dims[0],dims[1],dims[2]);
+  addField(&ff);
   for (auto a : verts) verts_.push_back(a);
   for (auto a : faces) faces_.push_back(a);
-  std::vector<Cleaver::AbstractScalarField*> fld;
-  fld.push_back(new Cleaver::FloatField(nullptr,dims[0],dims[1],dims[2]));
-  m_volumes.push_back(new Cleaver::Volume(fld,dims[0],dims[1],dims[2]));
-  emit dataChanged();
-  emit dataAdded();
-  emit meshAdded();
-  emit meshListChanged();
-  emit volumeAdded();
-  emit volumeListChanged();
 }
 
 void DataManager::removeVolume(Cleaver::Volume *volume)

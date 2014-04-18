@@ -2,6 +2,7 @@
 #define TRANSITIONMESHTOOL_H
 
 #include <QDockWidget>
+#include <Cleaver/Cleaver.h>
 
 namespace Ui {
 class TransitionMeshTool;
@@ -23,6 +24,7 @@ public slots:
 private:
     Ui::TransitionMeshTool *ui;
     std::vector<std::string> inputs_;
+    Cleaver::FloatField * ff_;
 };
 
 #endif // TRANSITIONMESHTOOL_H

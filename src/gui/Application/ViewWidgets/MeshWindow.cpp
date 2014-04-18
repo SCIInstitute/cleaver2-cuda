@@ -1225,24 +1225,17 @@ void MeshWindow::setMesh(std::vector<std::array<float,3>> &verts,
     faces_.push_back(a);
     if (a[3] > max_mat_) max_mat_ = a[3];
   }
+  max_mat_++;
   m_dataBounds = Cleaver::BoundingBox(x_min,y_min,z_min,
                                       x_max - x_min,y_max - y_min,
                                       z_max - z_min);
   size_t x = static_cast<size_t>(x_max - x_min);
   size_t y = static_cast<size_t>(y_max - y_min);
   size_t z = static_cast<size_t>(z_max - z_min);
-  std::vector<Cleaver::AbstractScalarField*> fld;
-  fld.push_back(new Cleaver::FloatField(nullptr,x,y,z));
-  Cleaver::Volume* volume = new Cleaver::Volume(fld,x,y,z);
-  if(!m_mesher)
-    m_mesher = new Cleaver::CleaverMesher(volume);
-  else{
-    m_mesher->setVolume(volume);
-  }
 
   m_bMaterialFaceLock.clear();
   m_bMaterialCellLock.clear();
-  for(int m=0; m < volume->numberOfMaterials(); m++){
+  for(int m=0; m < max_mat_; m++){
     m_bMaterialFaceLock.push_back(false);
     m_bMaterialCellLock.push_back(false);
   }
@@ -1882,7 +1875,7 @@ void MeshWindow::build_output_vbos()
           }
         }
       }
-      if (!clipped  && !m_bSurfacesOnly){
+      if (!clipped  && !m_bSurfacesOnly || m_bMaterialFaceLock[faces_[i][3]]){
         Cleaver::vec3 p1(verts_[faces_[i][0]][0],
                          verts_[faces_[i][0]][1],
                          verts_[faces_[i][0]][2]);
