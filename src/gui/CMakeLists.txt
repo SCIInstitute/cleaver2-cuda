@@ -106,18 +106,39 @@ INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR} ./)
 ADD_CUSTOM_TARGET(comp_shaders
                   DEPENDS ${default_vertex_shader} ${default_fragment_shader})
 
-if(APPLE)
-   ADD_EXECUTABLE(cleaver-gui MACOSX_BUNDLE
-       ${srcs} ${hdrs} ${moc_srcs} ${MOC_SRC} ${UI_SRC} ${RCC_SRC} ${vert} ${frag} ${vf_h})
-else()
-   ADD_EXECUTABLE(cleaver-gui ${srcs} ${hdrs} ${moc_srcs} ${MOC_SRC} ${UI_SRC} ${RCC_SRC} ${vert} ${frag} ${vf_h})
+#include CUDA if we have it
+find_package(CUDA)
+
+if(CUDA_FOUND)
+	ADD_DEFINITIONS(-DCUDA_FOUND)
+	# nvcc flags
+	if(CMAKE_COMPILER_IS_GNUCC)
+		set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-gencode arch=compute_20,code=sm_20)
+	  	string(REPLACE "-std=c++11" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	  	string(REPLACE "-std=c++0x" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	endif()
+	cuda_compile(CLEAVER_CUDA_O ./Util/cleaver_cuda.cu ./Util/cleaver_cuda.hh)
+	
 endif()
 
+SET(CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}" )
+
+if(APPLE)
+   ADD_EXECUTABLE(cleaver-gui MACOSX_BUNDLE
+       ${srcs} ${hdrs} ${CLEAVER_CUDA_O} ${moc_srcs} ${MOC_SRC} ${UI_SRC} 
+       ${RCC_SRC} ${vert} ${frag} ${vf_h})
+else()
+   ADD_EXECUTABLE(cleaver-gui ${srcs} ${hdrs} ${CLEAVER_CUDA_O} ${moc_srcs}
+   ${MOC_SRC} ${UI_SRC} ${RCC_SRC} ${vert} ${frag} ${vf_h})
+	   
+endif()
 
 if(WIN32)
-TARGET_LINK_LIBRARIES(cleaver-gui teem cleaver ${OPENGL_LIBRARIES} ${QT_LIBRARIES} ${GLEW_LIBRARIES} ) #
+TARGET_LINK_LIBRARIES(cleaver-gui teem cleaver 
+	${OPENGL_LIBRARIES} ${QT_LIBRARIES} ${GLEW_LIBRARIES} ${CUDA_LIBRARIES}) #
 else()
-TARGET_LINK_LIBRARIES(cleaver-gui teem cleaver ${OPENGL_LIBRARIES} ${QT_LIBRARIES} ) # stellar
+TARGET_LINK_LIBRARIES(cleaver-gui teem cleaver 
+	${OPENGL_LIBRARIES} ${QT_LIBRARIES} ${CUDA_LIBRARIES}) # stellar
 endif()
 
 ADD_DEPENDENCIES(cleaver-gui comp_shaders)

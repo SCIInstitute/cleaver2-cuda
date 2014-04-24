@@ -12,8 +12,11 @@
 #include <ctime>
 #include <cmath>
 #include <cstring>
-#include "cleaver_utility.h"
 #include <teem/nrrd.h>
+#include "cleaver_utility.h"
+#ifdef CUDA_FOUND
+#include "cleaver_cuda.hh"
+#endif
 
 CleaverUtility::CleaverUtility()
 : output_("output"),
@@ -31,7 +34,8 @@ CleaverUtility::CleaverUtility()
   dd_(0),
   m_(0),
   labels_(nullptr),
-  cut_cells_(nullptr) {}
+  cut_cells_(nullptr),
+  use_GPU_(true) {}
 
 CleaverUtility::~CleaverUtility() {
   if (verbose_)
@@ -55,6 +59,11 @@ void CleaverUtility::ParseInput(int argc, char *argv[])
     //------------------------
     if(token.compare("-h") == 0)
       PrintHelp();
+    //------------------------
+    //  Parse Help Flag
+    //------------------------
+    else if(token.compare("--force-CPU") == 0)
+      use_GPU_ = false;
     //------------------------
     //  Parse Silent Flag
     //------------------------
@@ -160,6 +169,7 @@ void CleaverUtility::PrintUsage()
   //  std::cerr << "   -f   output format     default=tetgen" << std::endl;
   std::cerr << "   -ra  x y z             absolute resolution" << std::endl;
   std::cerr << "   -rs  x y z             scaled resolution" << std::endl;
+  std::cerr << "   --force-CPU            forces CPU only" << std::endl;
 
   std::cerr << std::endl;
 
@@ -343,7 +353,7 @@ bool CleaverUtility::LoadNRRDs() {
   //---------------------------------------
   //     Allocate Sufficient Memory
   //---------------------------------------
-  size_t total_cells = w_*h_*d_;
+  size_t total_cells = ww_*hh_*dd_;
   delete[] data_;
   data_ = new float[total_cells*m_];
   if (!data_) {
@@ -452,6 +462,26 @@ bool CleaverUtility::LoadNRRDs() {
 
 void CleaverUtility::FindMaxes() {
   clock_t start = clock();
+#ifdef CUDA_FOUND
+  if (use_GPU_) {
+    float* tmp = new float[3 * scales_.size()];
+    float tmp2[3];
+    for (size_t t = 0; t < scales_.size(); t++)
+      for(size_t x = 0; x < 3; x++)
+        tmp[t*3 + x] = scales_[t][x];
+    for(size_t x = 0; x < 3; x++)
+      tmp2[x] = scale_[x];
+    CallCUDAKernel(data_,ww_,hh_,dd_,m_,labels_,
+                   w_,h_,d_,tmp,tmp2);
+    delete[] tmp;
+    double duration = ((double)clock() -
+        (double)start) / (double)CLOCKS_PER_SEC;
+    if (verbose_)
+      std::cout << "Found maxes:\t\t\t" <<
+      duration << " sec." << std::endl;
+    return;
+  }
+#endif
   for (size_t i = 0; i < w_; i++)
     for (size_t j = 0; j < h_; j++)
       for (size_t k = 0; k < d_; k++) {
@@ -520,11 +550,9 @@ float CleaverUtility::DataTransform(float i, float j, float k, size_t m) {
   size_t h = hh_;
   size_t d = dd_;
 
-  if (scaled_resolution_) {
-    x *= scale_[0];
-    y *= scale_[1];
-    z *= scale_[2];
-  }
+  x *= scale_[0];
+  y *= scale_[1];
+  z *= scale_[2];
   if (m < m_ - 1) {
     x /= scales_[m][0];
     y /= scales_[m][1];
@@ -690,7 +718,7 @@ void CleaverUtility::CalculateCut(SimpleEdge *edge,
   //degenerate cases
   if (bot == 0.) return;
   edge->isCut_eval |= kIsCut;
-  edge->isCut_eval |= ((std::min(matA,matB)%32) << kMaterial);
+  edge->isCut_eval |= ((std::min(matA,matB)%kMaxMaterials) << kMaterial);
   float t = std::min(std::max(top/bot,0.f),1.f);
   std::array<std::array<float,3>,2> edge_verts =
       geos.GetEdgeVertices(num,i,j,k,scale_);
@@ -784,16 +812,20 @@ void CleaverUtility::CalculateQuadruple(SimpleTet *tet,
   //There are no triples if one of its edges doesn't have a cut.
   std::array<SimpleFace*,4> faces =
       geos.GetTetFaces(Idx3(i,j,k),num);
+  //find 3 & 4 edge cut cases.
+  size_t num_cuts = 0;
+  std::array<SimpleEdge*,6> edges = geos.GetTetEdges(Idx3(i,j,k),num);
+  for (auto a : edges) if ((a->isCut_eval & kIsCut)) {
+    num_cuts++;
+    if (num_cuts > 2) {
+      tet->isCut_eval |= kHasStencil;
+      break;
+    }
+  }
+  // check for quadruple point
   for (size_t t = 0; t < 4; t++)
     if (!(faces[t]->isCut_eval & kIsCut)) return;
   tet->isCut_eval |= kIsCut;
-  //get the 4 vertices for the tet.
-  //  std::array<SimpleFace*,4> fcs = geos.GetTetFaces(Idx3(i,j,k),num);
-  //  for (auto a : fcs)
-  //    for(size_t x = 0; x < 3; x++)
-  //      tet->cut_loc[x] += a->cut_loc[x];
-  //  for(size_t x = 0; x < 3; x++)
-  //    tet->cut_loc[x] /= 4.;
 }
 
 void CleaverUtility::CalculateQuadruples(SimpleGeometry& geos) {
@@ -831,8 +863,10 @@ void CleaverUtility::StencilFaces(SimpleGeometry& geos) {
                                           (Definitions::tet_index)l);
             //don't repeat tets
             if (!(tet->isCut_eval & kIsStenciled)) {
-              AccumulateVertsAndFaces(
-                  tet,(Definitions::tet_index)l,i,j,k,geos);
+              tet->isCut_eval |= kIsStenciled;
+              if ((tet->isCut_eval & kHasStencil))
+                AccumulateVertsAndFaces(
+                    tet,(Definitions::tet_index)l,i,j,k,geos);
             }
           }
         }
@@ -927,11 +961,6 @@ void CleaverUtility::AccumulateVertsAndFaces(
     Definitions::tet_index num,
     size_t i, size_t j, size_t k, SimpleGeometry& geos) {
   //set this tet to be evaluated for mesh faces.
-  tet->isCut_eval |= kIsStenciled;
-  //  std::array<std::array<float,3>,4> tet_verts =
-  //      geos.GetTetVertices(num,i,j,k);
-  std::array<SimpleFace*,4> tet_faces =
-      geos.GetTetFaces(Idx3(i,j,k),num);
   std::array<Definitions::tri_index,4> tet_faces_num =
       geos.GetTetFacesNum(num);
   //first case is when this tet has a quad cut (6 edge cut)
@@ -965,6 +994,8 @@ void CleaverUtility::AccumulateVertsAndFaces(
   }
   //now look for 2 triple case (5 edge cut)
   size_t triple_count = 0;
+  std::array<SimpleFace*,4> tet_faces =
+      geos.GetTetFaces(Idx3(i,j,k),num);
   for (auto a : tet_faces) if ((a->isCut_eval & kIsCut)) triple_count++;
   if (triple_count == 2) {
     //get the 2 triple points
@@ -1105,9 +1136,6 @@ void CleaverUtility::AddFace(
     std::array<std::array<float,3>,3> face, char mat) {
   //shift to center on 0,0,0.
   for (auto &a : face) {
-    //    if (a[0]<2. || a[0]>ww_-2. || a[1]<2. ||
-    //        a[1]>hh_-2. || a[2]<2. || a[2]>dd_-2. )
-    //      return;
     a[0] -= (ww_ >> 1);
     a[1] -= (hh_ >> 1);
     a[2] -= (dd_ >> 1);
@@ -1117,35 +1145,5 @@ void CleaverUtility::AddFace(
     new_face[i] = verts_.size();
     verts_.push_back(face[i]);
   }
-  //  for (size_t i = 0; i < 3; i++) {
-  //    bool found = false;
-  //    size_t vert_num = 0;
-  //    //see if the vert already exists.
-  //    for (size_t j = 0; j < verts.size(); j++)
-  //      if ((std::abs(face[i][0] - verts[j][0]) < epsilon) &&
-  //          (std::abs(face[i][1] - verts[j][1]) < epsilon) &&
-  //          (std::abs(face[i][2] - verts[j][2]) < epsilon)) {
-  //        found = true;
-  //        vert_num = j;
-  //        break;
-  //      }
-  //    //add/set the vert for the face
-  //    if (found) {
-  //      new_face[i] = vert_num;
-  //    } else {
-  //      new_face[i] = verts.size();
-  //      verts.push_back(face[i]);
-  //    }
-  //  }
-  //  //make sure the new face doesn't have repeat verts.
-  //  if (new_face[0] == new_face[1] ||
-  //      new_face[0] == new_face[2] ||
-  //      new_face[2] == new_face[1]) return;
-  //  // make sure the faces doesn't already exist.
-  //  for (auto a : faces)
-  //    if (a[0] == new_face[0] &&
-  //        a[1] == new_face[1] &&
-  //        a[2] == new_face[2]) return;
-  //  //all is well, add the face.
   faces_.push_back(new_face);
 }

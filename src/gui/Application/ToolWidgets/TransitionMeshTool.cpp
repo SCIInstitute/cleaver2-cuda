@@ -49,7 +49,7 @@ void TransitionMeshTool::createTransitionMesh()
   bool scaleTrue = ui->scaleTrue->isChecked();
   if (inputs_.size() <= 1) {
     std::cerr << "Can't create a transition " <<
-        "mesh with only 1 material!" << std::endl;
+        "mesh with only < 2 materials!" << std::endl;
     return;
   }
   CleaverUtility program;

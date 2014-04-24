@@ -259,6 +259,9 @@ class CleaverUtility {
   std::vector<std::array<float,3>> verts_;
   /** The list of faces accumulated after stenciling. */
   std::vector<std::array<size_t,4>> faces_;
+  /** Whether to call the GPU or not. */
+  bool use_GPU_;
+
 };
 
 #endif /* CLEAVER_UTILITY_H_ */

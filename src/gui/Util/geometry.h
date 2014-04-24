@@ -42,8 +42,12 @@ static const char kIsEvaluated = 0x01;
 static const char kIsCut = 0x02;
 /** This constant is a mask for a tet's stenciling */
 static const char kIsStenciled = 0x04;
+/** This constant is a mask for if a tet has > 2 cuts. */
+static const char kHasStencil = 0x08;
 /** This constant is a shift for an edge's material */
-static const char kMaterial = 3;
+static const char kMaterial = 4;
+/** The maximum number of materials allowed (as far as coloring) */
+static const char kMaxMaterials = 16;
 /**
  * This is a list of numbers of geometries per cell.
  */
