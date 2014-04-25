@@ -96,6 +96,7 @@ class CleaverUtility {
    * @param abs The absolute resolution dimensions.
    * @param useScale Whether to use the scale res. or not.
    * @param useAbs Whether to use the absolute res. or not.
+   * @param useGPU Whether to use the GPU or not.
    * @return The pair of the vector of vertices and vector of faces.
    */
   std::pair<std::vector<std::array<float,3>>,
@@ -103,7 +104,7 @@ class CleaverUtility {
       std::vector<std::string> &files,
       std::array<float,3> &scales,
       std::array<size_t,3> &abs,
-      bool useScale, bool useAbs);
+      bool useScale, bool useAbs, bool useGPU);
   /**
    * Parses command line input, but does the same as overloaded
    * method above.

@@ -52,9 +52,11 @@ void TransitionMeshTool::createTransitionMesh()
         "mesh with only < 2 materials!" << std::endl;
     return;
   }
+  bool useGPU = ui->useGPU->isChecked();
   CleaverUtility program;
   std::pair<std::vector<std::array<float,3>>,std::vector<std::array<size_t,4>>>
-  output = program.GetVertsFacesFromNRRD(inputs_,scale,res,scaleTrue,absTrue);
+  output = program.GetVertsFacesFromNRRD(inputs_,scale,res,
+                                         scaleTrue,absTrue,useGPU);
   MainWindow::dataManager()->addTansitionMesh(
       output.first,output.second,{{program.w(),program.h(),program.d()}});
   MainWindow::instance()->createWindow(output.first, output.second);

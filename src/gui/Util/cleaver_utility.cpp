@@ -904,7 +904,8 @@ std::pair<std::vector<std::array<float,3>>,std::vector<std::array<size_t,4>>>
 CleaverUtility::GetVertsFacesFromNRRD(std::vector<std::string> &files,
                                       std::array<float,3> &scales,
                                       std::array<size_t,3> &res,
-                                      bool useScale, bool useAbs) {
+                                      bool useScale, bool useAbs,
+                                      bool useGPU) {
   inputs_.clear();
   for(auto a : files) inputs_.push_back(a);
   for(size_t x = 0; x < 3; x++) {
@@ -913,6 +914,7 @@ CleaverUtility::GetVertsFacesFromNRRD(std::vector<std::string> &files,
     if((absolute_resolution_ = useAbs))
       res_[x] = res[x];
   }
+  this->use_GPU_ = useGPU;
   /***************************CPU*****************************/
   //  Load Data
   if(!LoadNRRDs()) {
@@ -953,7 +955,8 @@ void CleaverUtility::GetVertsFacesFromNRRD(int argc, char *argv[]) {
   std::vector<std::string> ins;
   for(auto a : inputs_) ins.push_back(a);
   GetVertsFacesFromNRRD(ins,scale_,res_,
-                        scaled_resolution_,absolute_resolution_ );
+                        scaled_resolution_,absolute_resolution_,
+                        use_GPU_ );
 }
 
 void CleaverUtility::AccumulateVertsAndFaces(

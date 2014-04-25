@@ -265,6 +265,16 @@
      </layout>
     </item>
     <item alignment="Qt::AlignHCenter">
+     <widget class="QCheckBox" name="useGPU">
+      <property name="text">
+       <string>Use GPU</string>
+      </property>
+      <property name="checked">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+    <item alignment="Qt::AlignHCenter">
      <widget class="QToolButton" name="createMeshButton">
       <property name="minimumSize">
        <size>
