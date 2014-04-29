@@ -55,7 +55,7 @@ void TransitionMeshTool::createTransitionMesh()
   bool useGPU = ui->useGPU->isChecked();
   CleaverUtility program;
   std::pair<std::vector<std::array<float,3>>,std::vector<std::array<size_t,4>>>
-  output = program.GetVertsFacesFromNRRD(inputs_,scale,res,
+  output = program.GetVertsFacesFromNRRD(inputs_,scale.data(),res,
                                          scaleTrue,absTrue,useGPU);
   MainWindow::dataManager()->addTansitionMesh(
       output.first,output.second,{{program.w(),program.h(),program.d()}});

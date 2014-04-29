@@ -37,7 +37,6 @@ MainWindow::MainWindow(const QString &title)
   connect(m_workspace, SIGNAL(subWindowActivated(QMdiSubWindow *)), m_cleaverWidget,         SLOT(focus(QMdiSubWindow*)));
   connect(m_workspace, SIGNAL(subWindowActivated(QMdiSubWindow*)),  m_sizingFieldWidget,     SLOT(focus(QMdiSubWindow*)));
   connect(m_workspace, SIGNAL(subWindowActivated(QMdiSubWindow*)),  m_dataManagerWidget,     SLOT(focus(QMdiSubWindow*)));
-  connect(m_workspace, SIGNAL(subWindowActivated(QMdiSubWindow*)),  m_transitionMeshTool,     SLOT(focus(QMdiSubWindow*)));
   m_iNumOpenWindows = 0;
 }
 

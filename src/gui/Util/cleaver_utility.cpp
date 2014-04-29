@@ -24,7 +24,6 @@ CleaverUtility::CleaverUtility()
   verbose_(true),
   absolute_resolution_(false),
   scaled_resolution_(false),
-  scale_({{1.,1.,1.}}),
   data_(nullptr),
   w_(0),
   h_(0),
@@ -35,7 +34,11 @@ CleaverUtility::CleaverUtility()
   m_(0),
   labels_(nullptr),
   cut_cells_(nullptr),
-  use_GPU_(true) {}
+  use_GPU_(true) {
+  device_pointers_[0] = device_pointers_[1] = device_pointers_[2] = NULL;
+  scale_[0] = scale_[1] = scale_[2] = 1.;
+  scalesP_ = nullptr;
+}
 
 CleaverUtility::~CleaverUtility() {
   if (verbose_)
@@ -43,6 +46,7 @@ CleaverUtility::~CleaverUtility() {
   delete[] data_;
   delete[] labels_;
   delete[] cut_cells_;
+  delete[] scalesP_;
   if (verbose_)
     std::cout << "Done." << std::endl;
 }
@@ -402,6 +406,11 @@ bool CleaverUtility::LoadNRRDs() {
     std::array<float,3> scale = {{ xs, ys, zs }};
     scales_.push_back(scale);
   }
+  delete[] scalesP_;
+  scalesP_ = new float[scales_.size()*3];
+  for (size_t u = 0; u < scales_.size(); u++)
+    for (size_t v = 0; v < 3; v++)
+      scalesP_[u*3 + v] = scales_.at(u).at(v);
   //set absolute resolution
   if(absolute_resolution_ && !scaled_resolution_) {
     w_ = res_[0];
@@ -464,16 +473,8 @@ void CleaverUtility::FindMaxes() {
   clock_t start = clock();
 #ifdef CUDA_FOUND
   if (use_GPU_) {
-    float* tmp = new float[3 * scales_.size()];
-    float tmp2[3];
-    for (size_t t = 0; t < scales_.size(); t++)
-      for(size_t x = 0; x < 3; x++)
-        tmp[t*3 + x] = scales_[t][x];
-    for(size_t x = 0; x < 3; x++)
-      tmp2[x] = scale_[x];
-    CallCUDAKernel(data_,ww_,hh_,dd_,m_,labels_,
-                   w_,h_,d_,tmp,tmp2);
-    delete[] tmp;
+    CleaverCUDA::CallCUDAMaxes(data_,ww_,hh_,dd_,m_,labels_,
+                               w_,h_,d_,scalesP_,scale_,device_pointers_);
     double duration = ((double)clock() -
         (double)start) / (double)CLOCKS_PER_SEC;
     if (verbose_)
@@ -486,15 +487,18 @@ void CleaverUtility::FindMaxes() {
     for (size_t j = 0; j < h_; j++)
       for (size_t k = 0; k < d_; k++) {
         int max = 0;
-        float max_val = DataTransform(static_cast<float>(i),
-                                      static_cast<float>(j),
-                                      static_cast<float>(k),0);
+        float max_val = CleaverCUDA::CUDADataTransform(
+            data_,static_cast<float>(i),
+            static_cast<float>(j),
+            static_cast<float>(k),
+            0,m_,scalesP_,scale_,ww_,hh_,dd_);
         for (size_t l = 1; l < m_; l++) {
           float tmp;
-          if ((tmp = DataTransform(static_cast<float>(i),
-                                   static_cast<float>(j),
-                                   static_cast<float>(k),
-                                   l)) > max_val) {
+          if ((tmp = CleaverCUDA::CUDADataTransform(
+              data_,static_cast<float>(i),
+              static_cast<float>(j),
+              static_cast<float>(k),
+              l,m_,scalesP_,scale_,ww_,hh_,dd_)) > max_val) {
             max_val = tmp;
             max = l;
           }
@@ -536,129 +540,12 @@ void CleaverUtility::FindCutCells() {
   double duration = ((double)clock() - (double)start) / (double)CLOCKS_PER_SEC;
   if (verbose_)
     std::cout << "Found cut cells: (" << count_cuts << ")\t" <<
+    ((count_cuts < 10000)?"\t":"") <<
     duration << " sec." << std::endl;
 }
 
-float CleaverUtility::DataTransform(float i, float j, float k, size_t m) {
-  float x = i;
-  float y = j;
-  float z = k;
 
-  size_t whd = ww_*hh_*dd_;
-  size_t wh = ww_*hh_;
-  size_t w = ww_;
-  size_t h = hh_;
-  size_t d = dd_;
 
-  x *= scale_[0];
-  y *= scale_[1];
-  z *= scale_[2];
-  if (m < m_ - 1) {
-    x /= scales_[m][0];
-    y /= scales_[m][1];
-    z /= scales_[m][2];
-  }
-
-  x -= 0.5f;
-  y -= 0.5f;
-  z -= 0.5f;
-
-  bool inside = (x >= -.5) && (x < ww_+.5) &&
-      (y >= -.5) && (y < hh_+.5) &&
-      (z >= -.5) && (z < dd_+.5);
-
-  if (m < m_ - 1) {
-    if(inside) {
-      float t = fmod(x,1.0f);
-      float u = fmod(y,1.0f);
-      float v = fmod(z,1.0f);
-
-      int i0 = std::floor(x);   int i1 = i0+1;
-      int j0 = std::floor(y);   int j1 = j0+1;
-      int k0 = std::floor(z);   int k1 = k0+1;
-      int zero = 0;
-
-      i0 = std::min(std::max(zero,i0),static_cast<int>(w)-1);
-      j0 = std::min(std::max(zero,j0),static_cast<int>(h)-1);
-      k0 = std::min(std::max(zero,k0),static_cast<int>(d)-1);
-
-      i1 = std::min(std::max(zero,i1),static_cast<int>(w)-1);
-      j1 = std::min(std::max(zero,j1),static_cast<int>(h)-1);
-      k1 = std::min(std::max(zero,k1),static_cast<int>(d)-1);
-
-      float C000 = data_[i0 + j0*w + k0*wh + m*whd];
-      float C001 = data_[i0 + j0*w + k1*wh + m*whd];
-      float C010 = data_[i0 + j1*w + k0*wh + m*whd];
-      float C011 = data_[i0 + j1*w + k1*wh + m*whd];
-      float C100 = data_[i1 + j0*w + k0*wh + m*whd];
-      float C101 = data_[i1 + j0*w + k1*wh + m*whd];
-      float C110 = data_[i1 + j1*w + k0*wh + m*whd];
-      float C111 = data_[i1 + j1*w + k1*wh + m*whd];
-
-      return float((1-t)*(1-u)*(1-v)*C000 + (1-t)*(1-u)*(v)*C001 +
-                   (1-t)*  (u)*(1-v)*C010 + (1-t)*  (u)*(v)*C011 +
-                   (t)*(1-u)*(1-v)*C100 +   (t)*(1-u)*(v)*C101 +
-                   (t)*  (u)*(1-v)*C110 +   (t)*  (u)*(v)*C111);
-    } else
-      return -1000.;
-  } else {
-    if(inside)
-      return -1000.;
-    else
-      return 1000.;
-  }
-
-}
-
-std::pair<char,float> CleaverUtility::GetCellCenterValue(
-    size_t i, size_t j, size_t k, size_t m,  bool find_max) {
-  if (!find_max)
-    return std::pair<char,float>(m,DataTransform(
-        static_cast<float>(i)+0.5f,
-        static_cast<float>(j)+0.5f,
-        static_cast<float>(k)+0.5f,m));
-  char mat = 0;
-  float tmp, val = DataTransform(
-      static_cast<float>(i)+0.5f,
-      static_cast<float>(j)+0.5f,
-      static_cast<float>(k)+0.5f, 0);
-  for(size_t a = 1; a < m_; a++) {
-    if ((tmp = DataTransform(
-        static_cast<float>(i)+0.5f,
-        static_cast<float>(j)+0.5f,
-        static_cast<float>(k)+0.5f, a)) > val) {
-      val = tmp;
-      mat = a;
-    }
-  }
-  return std::pair<char,float>(mat,val);
-}
-
-std::pair<char,float> CleaverUtility::GetEdgeMatAndValueAtEndpoint(
-    Definitions::edge_index num, bool first, bool find_max,
-    size_t i, size_t j, size_t k, size_t m) {
-  //find the respective adjacent cell for the vertex we want
-  std::array<size_t,3> arr = SimpleGeometry::GetAdjacentCellFromEdge(
-      num,first,i,j,k);
-  size_t adj_cell = Idx3(arr[0],arr[1],arr[2]);
-  //the center value of this cell. (V1)
-  std::pair<char,float> res =
-      GetCellCenterValue(i,j,k,m,find_max);
-  if ((num < 8 && !first) || (num >= 14)) {
-    // diagonal edges & second vertex, or axis edges.
-    res.first = find_max?labels_[adj_cell]:m;
-    res.second = DataTransform(arr[0],arr[1],arr[2],res.first);
-  } else if ((8 <= num && num < 14)) { // dual edges
-    bool neg =
-        (num == Definitions::CL) || // is always on left, bottom, or front.
-        (num == Definitions::CD) ||
-        (num == Definitions::CF);
-    if (neg) first = !first;       // flip first if we are on the negative edge
-    if (!first)                    // second vertex
-      res = GetCellCenterValue(arr[0],arr[1],arr[2],m,find_max);
-  }
-  return res;
-}
 
 size_t CleaverUtility::w() { return w_; }
 
@@ -672,58 +559,61 @@ bool CleaverUtility::verbose() { return verbose_; }
 
 void CleaverUtility::CalculateCuts(SimpleGeometry&  geos) {
   clock_t start = clock();
+#ifdef CUDA_FOUND
+  if (use_GPU_) {
+    size_t count_cuts =
+        //        CleaverCUDA::CallCUDACuts(device_pointers_[0],
+        //                               ww_,hh_,dd_,m_,
+        //                               w_,h_,d_,
+        //                               device_pointers_[1],
+        //                               device_pointers_[2],
+        //                               (CleaverCUDA::Edge*)
+        //                               geos.GetEdgePointers()[0],
+        //                               (CleaverCUDA::Edge*)
+        //                               geos.GetEdgePointers()[1],
+        //                               (CleaverCUDA::Edge*)
+        //                               geos.GetEdgePointers()[2]);
+        CleaverCUDA::CallCUDACuts(data_,
+                                  ww_,hh_,dd_,m_,
+                                  w_,h_,d_,
+                                  scalesP_,
+                                  scale_,
+                                  (CleaverCUDA::Edge*)
+                                  geos.GetEdgePointers()[0],
+                                  (CleaverCUDA::Edge*)
+                                  geos.GetEdgePointers()[1],
+                                  (CleaverCUDA::Edge*)
+                                  geos.GetEdgePointers()[2]);
+    double duration = ((double)clock() - (double)start) /
+        (double)CLOCKS_PER_SEC;
+    if (verbose_)
+      std::cout << "Found all Cuts: (" << count_cuts << ")\t" <<
+      ((count_cuts < 10000)?"\t":"") << duration << " sec." << std::endl;
+    return;
+  }
+#endif
   size_t count_cuts = 0;
   for(size_t i = 0; i < w_; i ++)
     for(size_t j = 0; j < h_; j ++)
       for(size_t k = 0; k < d_; k ++) {
         if(cut_cells_[Idx3(i,j,k)]) {
           for(size_t l = 0; l < Definitions::kEdgesPerCell; l++) {
-            SimpleEdge* edge = geos.GetEdge(Idx3(i,j,k),
-                                            (Definitions::edge_index)l);
-            if(!(edge->isCut_eval & kIsEvaluated)) {
-              CalculateCut(edge,(Definitions::edge_index)l,i,j,k, geos);
-              if ((edge->isCut_eval & kIsCut)) count_cuts++;
+            CleaverCUDA::Edge* edge = geos.GetEdge(Idx3(i,j,k),
+                                                   (CleaverCUDA::edge_index)l);
+            if(!(edge->isCut_eval & CleaverCUDA::kIsEvaluated)) {
+              CleaverCUDA::FindEdgeCutCUDA(
+                  data_,scalesP_,scale_,ww_,hh_,dd_,m_,i,j,k,edge,
+                  (CleaverCUDA::edge_index)l);
+              if ((edge->isCut_eval & CleaverCUDA::kIsCut)) count_cuts++;
             }
           }
         }
       }
-  double duration = ((double)clock() - (double)start) / (double)CLOCKS_PER_SEC;
+  double duration = ((double)clock() -
+      (double)start) / (double)CLOCKS_PER_SEC;
   if (verbose_)
     std::cout << "Found all Cuts: (" << count_cuts << ")\t" <<
-    duration << " sec." << std::endl;
-}
-
-void CleaverUtility::CalculateCut(SimpleEdge *edge,
-                                  Definitions::edge_index num,
-                                  size_t i, size_t j, size_t k,
-                                  SimpleGeometry& geos) {
-  edge->isCut_eval |= kIsEvaluated;
-  //get strongest material at each end of the edge
-  std::pair<char,float> v1 =
-      GetEdgeMatAndValueAtEndpoint(num,true,true,i,j,k,m_);
-  std::pair<char,float> v2 =
-      GetEdgeMatAndValueAtEndpoint(num,false,true,i,j,k,m_);
-  char matA = v1.first, matB = v2.first;
-  //if they are the same, nothing to be done: no cut
-  if (matA == matB) return;
-  //if they are different, interpolate transition point.
-  float a1 = v1.second;
-  float b2 = v2.second;
-  float a2 = GetEdgeMatAndValueAtEndpoint(
-      num,false,false,i,j,k,matA).second;
-  float b1 = GetEdgeMatAndValueAtEndpoint(
-      num,true,false,i,j,k,matB).second;
-  float top = (a1 - b1);
-  float bot = (b2 - a2 + a1 - b1);
-  //degenerate cases
-  if (bot == 0.) return;
-  edge->isCut_eval |= kIsCut;
-  edge->isCut_eval |= ((std::min(matA,matB)%kMaxMaterials) << kMaterial);
-  float t = std::min(std::max(top/bot,0.f),1.f);
-  std::array<std::array<float,3>,2> edge_verts =
-      geos.GetEdgeVertices(num,i,j,k,scale_);
-  for (size_t x = 0; x < 3; x++)
-    edge->cut_loc[x] = (1. - t) * edge_verts[0][x] + t * edge_verts[1][x];
+    ((count_cuts < 10000)?"\t":"") << duration << " sec." << std::endl;
 }
 
 std::array<float,3> CleaverUtility::FindTriplePoint(
@@ -770,9 +660,9 @@ void CleaverUtility::CalculateTriples(SimpleGeometry& geos) {
           for(size_t l = 0; l < Definitions::kFacesPerCell; l++) {
             SimpleFace* face = geos.GetFace(Idx3(i,j,k),
                                             (Definitions::tri_index)l);
-            if(!(face->isCut_eval & kIsEvaluated)) {
+            if(!(face->isCut_eval & CleaverCUDA::kIsEvaluated)) {
               CalculateTriple(face,(Definitions::tri_index)l,i,j,k,geos);
-              if ((face->isCut_eval & kIsCut)) count_trips++;
+              if ((face->isCut_eval & CleaverCUDA::kIsCut)) count_trips++;
             }
           }
         }
@@ -787,13 +677,13 @@ void CleaverUtility::CalculateTriple(SimpleFace *face,
                                      Definitions::tri_index num,
                                      size_t i, size_t j, size_t k,
                                      SimpleGeometry& geos)  {
-  face->isCut_eval |= kIsEvaluated;
+  face->isCut_eval |= CleaverCUDA::kIsEvaluated;
   //There are no triples if one of its edges doesn't have a cut.
-  std::array<SimpleEdge*,3> edges =
+  std::array<CleaverCUDA::Edge*,3> edges =
       geos.GetFaceEdges(Idx3(i,j,k),num,(Definitions::tet_index)(-1));
   for (size_t t = 0; t < 3; t++)
-    if (!(edges[t]->isCut_eval & kIsCut)) return;
-  face->isCut_eval |= kIsCut;
+    if (!(edges[t]->isCut_eval & CleaverCUDA::kIsCut)) return;
+  face->isCut_eval |= CleaverCUDA::kIsCut;
   //get the 3 vertices for the face.
   //  std::array<std::array<float,3>,3> pts;
   //  for (size_t x = 0; x < 3; x++)
@@ -808,24 +698,25 @@ void CleaverUtility::CalculateQuadruple(SimpleTet *tet,
                                         Definitions::tet_index num,
                                         size_t i, size_t j, size_t k,
                                         SimpleGeometry& geos) {
-  tet->isCut_eval |= kIsEvaluated;
+  tet->isCut_eval |= CleaverCUDA::kIsEvaluated;
   //There are no triples if one of its edges doesn't have a cut.
   std::array<SimpleFace*,4> faces =
       geos.GetTetFaces(Idx3(i,j,k),num);
   //find 3 & 4 edge cut cases.
   size_t num_cuts = 0;
-  std::array<SimpleEdge*,6> edges = geos.GetTetEdges(Idx3(i,j,k),num);
-  for (auto a : edges) if ((a->isCut_eval & kIsCut)) {
+  std::array<CleaverCUDA::Edge*,6> edges =
+      geos.GetTetEdges(Idx3(i,j,k),num);
+  for (auto a : edges) if ((a->isCut_eval & CleaverCUDA::kIsCut)) {
     num_cuts++;
     if (num_cuts > 2) {
-      tet->isCut_eval |= kHasStencil;
+      tet->isCut_eval |= CleaverCUDA::kHasStencil;
       break;
     }
   }
   // check for quadruple point
   for (size_t t = 0; t < 4; t++)
-    if (!(faces[t]->isCut_eval & kIsCut)) return;
-  tet->isCut_eval |= kIsCut;
+    if (!(faces[t]->isCut_eval & CleaverCUDA::kIsCut)) return;
+  tet->isCut_eval |= CleaverCUDA::kIsCut;
 }
 
 void CleaverUtility::CalculateQuadruples(SimpleGeometry& geos) {
@@ -838,9 +729,9 @@ void CleaverUtility::CalculateQuadruples(SimpleGeometry& geos) {
           for(size_t l = 0; l < Definitions::kTetsPerCell; l++) {
             SimpleTet* tet = geos.GetTet(Idx3(i,j,k),
                                          (Definitions::tet_index)l);
-            if(!(tet->isCut_eval & kIsEvaluated)) {
+            if(!(tet->isCut_eval & CleaverCUDA::kIsEvaluated)) {
               CalculateQuadruple(tet,(Definitions::tet_index)l,i,j,k,geos);
-              if ((tet->isCut_eval & kIsCut)) count_quads++;
+              if ((tet->isCut_eval & CleaverCUDA::kIsCut)) count_quads++;
             }
           }
         }
@@ -862,9 +753,9 @@ void CleaverUtility::StencilFaces(SimpleGeometry& geos) {
             SimpleTet * tet = geos.GetTet(Idx3(i,j,k),
                                           (Definitions::tet_index)l);
             //don't repeat tets
-            if (!(tet->isCut_eval & kIsStenciled)) {
-              tet->isCut_eval |= kIsStenciled;
-              if ((tet->isCut_eval & kHasStencil))
+            if (!(tet->isCut_eval & CleaverCUDA::kIsStenciled)) {
+              tet->isCut_eval |= CleaverCUDA::kIsStenciled;
+              if ((tet->isCut_eval & CleaverCUDA::kHasStencil))
                 AccumulateVertsAndFaces(
                     tet,(Definitions::tet_index)l,i,j,k,geos);
             }
@@ -902,7 +793,7 @@ void CleaverUtility::OutputToFile() {
 
 std::pair<std::vector<std::array<float,3>>,std::vector<std::array<size_t,4>>>
 CleaverUtility::GetVertsFacesFromNRRD(std::vector<std::string> &files,
-                                      std::array<float,3> &scales,
+                                      float scales[3],
                                       std::array<size_t,3> &res,
                                       bool useScale, bool useAbs,
                                       bool useGPU) {
@@ -967,10 +858,11 @@ void CleaverUtility::AccumulateVertsAndFaces(
   std::array<Definitions::tri_index,4> tet_faces_num =
       geos.GetTetFacesNum(num);
   //first case is when this tet has a quad cut (6 edge cut)
-  if ((tet->isCut_eval & kIsCut)) {
+  if ((tet->isCut_eval & CleaverCUDA::kIsCut)) {
     //the first vertex is always the quadruple point
     std::array<float,3> v1 = {{0,0,0}};
-    std::array<SimpleEdge*,6> tedges = geos.GetTetEdges(Idx3(i,j,k),num);
+    std::array<CleaverCUDA::Edge*,6> tedges =
+        geos.GetTetEdges(Idx3(i,j,k),num);
     for (auto vv : tedges) {
       for (size_t x = 0; x < 3; x++)
         v1[x] += (vv->cut_loc[x]);
@@ -979,7 +871,7 @@ void CleaverUtility::AccumulateVertsAndFaces(
     for (size_t f = 0; f < 4; f++) {
       // the second vertex is 1 of the 4 triples points
       std::array<float,3> v2 = {{0,0,0}};
-      std::array<SimpleEdge *,3> edges =
+      std::array<CleaverCUDA::Edge *,3> edges =
           geos.GetFaceEdges(Idx3(i,j,k),tet_faces_num[f],num);
       for (size_t e = 0; e < 3; e++)
         for (size_t x = 0; x < 3; x++)
@@ -990,7 +882,8 @@ void CleaverUtility::AccumulateVertsAndFaces(
         std::array<float,3> v3 = {{0,0,0}};
         for (size_t x = 0; x < 3; x++)
           v3[x] = edges[e]->cut_loc[x];
-        AddFace({{ v1, v2, v3 }}, (edges[0]->isCut_eval >> kMaterial));
+        AddFace({{ v1, v2, v3 }}, (edges[0]->isCut_eval >>
+            CleaverCUDA::kMaterial));
       }
     }
     return;
@@ -999,12 +892,13 @@ void CleaverUtility::AccumulateVertsAndFaces(
   size_t triple_count = 0;
   std::array<SimpleFace*,4> tet_faces =
       geos.GetTetFaces(Idx3(i,j,k),num);
-  for (auto a : tet_faces) if ((a->isCut_eval & kIsCut)) triple_count++;
+  for (auto a : tet_faces) if ((a->isCut_eval &
+      CleaverCUDA::kIsCut)) triple_count++;
   if (triple_count == 2) {
     //get the 2 triple points
     std::array<float,3> tpA, tpB, shared_cp, fa1, fa2, fb1, fb2;
     tpA = tpB = shared_cp = fa1 = fa2 = fb1 = fb2 = {{0,0,0}};
-    std::array<SimpleEdge *,3> edges1, edges2, edges3;
+    std::array<CleaverCUDA::Edge *,3> edges1, edges2, edges3;
     edges1 = edges2 = edges3 = {{nullptr, nullptr, nullptr}};
     for (size_t x = 0; x < 3; x++) {
       edges1[x] = nullptr;
@@ -1013,7 +907,7 @@ void CleaverUtility::AccumulateVertsAndFaces(
     }
     bool first = true;
     for (size_t f = 0; f < 4; f++)
-      if ((tet_faces[f]->isCut_eval & kIsCut)) {
+      if ((tet_faces[f]->isCut_eval & CleaverCUDA::kIsCut)) {
         if (first) {
           edges1 = geos.GetFaceEdges(Idx3(i,j,k),tet_faces_num[f],num);
           for (auto aa : edges1)
@@ -1029,10 +923,11 @@ void CleaverUtility::AccumulateVertsAndFaces(
         }
         if (!first && edges3[0]) break;
         first = false;
-      } else if (!edges3[0])
+      } else if (!edges3[0]) {
         edges3 = geos.GetFaceEdges(Idx3(i,j,k),tet_faces_num[f],num);
+      }
     //get the shared edge cut
-    std::array<SimpleEdge*,5> edges =
+    std::array<CleaverCUDA::Edge*,5> edges =
     {{nullptr,nullptr,nullptr, nullptr,nullptr}};
     for (auto& a : edges) a = nullptr;
     for (auto a: edges1) {
@@ -1051,7 +946,7 @@ void CleaverUtility::AccumulateVertsAndFaces(
       for (size_t u = 0; u < 3; u++)
         on_third[t] |= (edges3[u] == edges[t+1]);
     if (on_third[0] != on_third[2]) {
-      SimpleEdge * tmp = edges[1];
+      CleaverCUDA::Edge * tmp = edges[1];
       edges[1] = edges[2];
       edges[2] = tmp;
     }
@@ -1063,23 +958,29 @@ void CleaverUtility::AccumulateVertsAndFaces(
       fb2[x]       = edges[4]->cut_loc[x];
     }
     //now add the 5 faces.
-    AddFace({{fa1,tpB,fb1}}, (edges[1]->isCut_eval >> kMaterial));
-    AddFace({{fa1,tpA,tpB}}, (edges[1]->isCut_eval >> kMaterial));
-    AddFace({{fa2,tpB,fb2}}, (edges[2]->isCut_eval >> kMaterial));
-    AddFace({{fa2,tpA,tpB}}, (edges[2]->isCut_eval >> kMaterial));
-    AddFace({{tpA,tpB,shared_cp}}, (edges[0]->isCut_eval >> kMaterial));
+    AddFace({{fa1,tpB,fb1}},
+            (edges[1]->isCut_eval >> CleaverCUDA::kMaterial));
+    AddFace({{fa1,tpA,tpB}},
+            (edges[1]->isCut_eval >> CleaverCUDA::kMaterial));
+    AddFace({{fa2,tpB,fb2}},
+            (edges[2]->isCut_eval >> CleaverCUDA::kMaterial));
+    AddFace({{fa2,tpA,tpB}},
+            (edges[2]->isCut_eval >> CleaverCUDA::kMaterial));
+    AddFace({{tpA,tpB,shared_cp}},
+            (edges[0]->isCut_eval >> CleaverCUDA::kMaterial));
     return;
   }
   //now deal with 3 & 4 edge cut cases.
-  std::array<SimpleEdge *,3> edges = {{nullptr,nullptr,nullptr}};
+  std::array<CleaverCUDA::Edge *,3> edges = {{nullptr,nullptr,nullptr}};
   std::vector<std::pair<std::array<float,3>,std::vector<size_t>> > pts;
   std::vector<char> mats;
   for (auto& a : pts)
     a.first = {{0,0,0}};
   for (size_t f = 0; f < 4; f++) {
-    edges = geos.GetFaceEdges(Idx3(i,j,k),tet_faces_num[f],num);
+    std::array<CleaverCUDA::Edge *,3> edges =
+        geos.GetFaceEdges(Idx3(i,j,k),tet_faces_num[f],num);
     for(auto a : edges)
-      if ((a->isCut_eval & kIsCut)) {
+      if ((a->isCut_eval & CleaverCUDA::kIsCut)) {
         //add the point to list of points.
         std::array<float,3> pt = {{a->cut_loc[0],
             a->cut_loc[1],a->cut_loc[2]}};
@@ -1096,7 +997,7 @@ void CleaverUtility::AccumulateVertsAndFaces(
           std::vector<size_t> tmp; tmp.push_back(f);
           pts.push_back(std::pair<std::array<float,3>,
                         std::vector<size_t>>(pt,tmp));
-          mats.push_back(a->isCut_eval >> kMaterial);
+          mats.push_back(a->isCut_eval >> CleaverCUDA::kMaterial);
         }
       }
   }

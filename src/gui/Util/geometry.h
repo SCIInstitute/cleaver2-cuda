@@ -10,6 +10,7 @@
 #define GEOMETRY_H_
 
 #include <array>
+#include "cleaver_cuda.hh"
 
 /** Macro to index into a 1D array with 3D dimensions. */
 #define Idx3(a,b,c)           ((a) + w_ * (b) + w_ * h_ * (c))
@@ -17,13 +18,6 @@
 #define Idx4(a,b,c,d)         \
     ((a) + w_ * (b) + w_ * h_ * (c) + w_ * h_ * d_ * (d))
 
-/**
- * Simple Edge struct used for CUDA Edges.
- */
-typedef struct SimpleEdge {
-  char isCut_eval = 0;  //& 0xf0 for isCut, & 0x0f for eval
-  float cut_loc[3] = {0.,0.,0.};
-} SimpleEdge;
 /**
  * Simple Face struct used for CUDA faces.
  */
@@ -36,18 +30,7 @@ typedef struct SimpleFace {
 typedef struct SimpleTet {
   char isCut_eval = 0; //& 0xf0 for isCut, & 0x0f for eval
 } SimpleTet;
-/** This constant is a mask for geometery evaluation */
-static const char kIsEvaluated = 0x01;
-/** This constant is a mask for an edge cut */
-static const char kIsCut = 0x02;
-/** This constant is a mask for a tet's stenciling */
-static const char kIsStenciled = 0x04;
-/** This constant is a mask for if a tet has > 2 cuts. */
-static const char kHasStencil = 0x08;
-/** This constant is a shift for an edge's material */
-static const char kMaterial = 4;
-/** The maximum number of materials allowed (as far as coloring) */
-static const char kMaxMaterials = 16;
+
 /**
  * This is a list of numbers of geometries per cell.
  */
@@ -56,13 +39,6 @@ class Definitions {
   const static size_t kEdgesPerCell = 26;
   const static size_t kFacesPerCell = 36;
   const static size_t kTetsPerCell  = 24;
-  enum edge_index {
-    DULF, DULB, DURF, DURB,   //  ]_ Diagonal      (0-3)
-    DLLF, DLLB, DLRF, DLRB,   //  ]  Edges         (4-7)
-    CL, CR, CU, CD, CF, CB,   // Dual   Edges      (8-13)
-    UL, UR, UF, UB,           // Top    Face Edges (14-17)
-    LL, LR, LF, LB,           // Bottom Face Edges (18-21)
-    FL, FR, BL, BR };         // Four Column Edges (22-25)
 
   enum tri_index {
     FUL, FUR, FUF, FUB,        //Inner upper  (0-3)
@@ -109,17 +85,6 @@ class SimpleGeometry {
    */
   bool Valid();
   /**
-   * Gets the 2 point locations (vertices) of an edge by it's number.
-   * @param num The number of the edge.
-   * @param i The x location in the lattice.
-   * @param j The x location in the lattice.
-   * @param k The x location in the lattice.
-   */
-  std::array<std::array<float,3>,2> GetEdgeVertices(
-      Definitions::edge_index num,
-      size_t i, size_t j, size_t k,
-      std::array<float,3> scale);
-  /**
    * Gets the 3 point locations (vertices) of a face by it's number.
    * @param num The number of the face.
    * @param i The x location in the lattice.
@@ -147,14 +112,14 @@ class SimpleGeometry {
    * @param fnum  The number of the face.
    * @param tnum  The number of the tet.
    */
-  std::array<SimpleEdge*,3> GetFaceEdges(size_t cell,
+  std::array<CleaverCUDA::Edge*,3> GetFaceEdges(size_t cell,
                                          Definitions::tri_index fnum,
                                          Definitions::tet_index tnum);
   /**
    * Returns an array of 3 indices to the 3 edges for the given face of a cell.
    * @param num  The number of the face.
    */
-  std::array<Definitions::edge_index,3> GetFaceEdgesNum(
+  std::array<CleaverCUDA::edge_index,3> GetFaceEdgesNum(
       Definitions::tri_index num);
   /**
    * Returns an array of 4 pointers to the 4 faces for the given tet of a cell.
@@ -168,7 +133,7 @@ class SimpleGeometry {
    * @param cell The number of the cell.
    * @param num  The number of the tet.
    */
-  std::array<SimpleEdge*,6> GetTetEdges(
+  std::array<CleaverCUDA::Edge*,6> GetTetEdges(
       size_t cell, Definitions::tet_index n);
   /**
    * Returns an array of 4 indices of the 4 faces for the given tet of a cell.
@@ -183,8 +148,18 @@ class SimpleGeometry {
    * diagonals, 8-13 are the dual edges, and 14-25 are the face edges.
    * @return the pointer to the desired edge.
    */
-  SimpleEdge * GetEdge(int64_t cell,
-                       Definitions::edge_index edge);
+  CleaverCUDA::Edge * GetEdge(int64_t cell,
+                       CleaverCUDA::edge_index edge);
+  /**
+   * Returns the 3 pointers to the different edge arrays.
+   * @return The 3 pointers to the different edge arrays.
+   */
+  std::array<CleaverCUDA::Edge *,3> GetEdgePointers();
+  /**
+   * Returns the sizes to the different edge arrays.
+   * @return The sizes to the different edge arrays.
+   */
+  std::array<size_t,3> GetEdgePointersSize();
   /**
    * Returns a pointer to the desired face of a cell.
    * @param cell The cell number (<w*h*d).
@@ -203,18 +178,6 @@ class SimpleGeometry {
    * Tests all of the geometry to be sure it is correct.
    */
   void TestCells();
-  /**
-   * Finds the respective adjacent cell from a given one
-   * that is useful when calculating values for edge endpoints.
-   * @param num The edge of interest.
-   * @param first Whether we want the first or second vertex on the edge.
-   * @param i The x location in the block.
-   * @param j The y location in the block.
-   * @param k The z location in the block.
-   */
-  static std::array<size_t,3> GetAdjacentCellFromEdge(
-      Definitions::edge_index num, bool first,
-      size_t i, size_t j, size_t k);
  private:
   /**
    * Creates a standard array from 3 size_t values.
@@ -240,7 +203,7 @@ class SimpleGeometry {
    * @return The index of the bisect edge array we need for this cell and dir.
    */
   size_t GetDualEdgeIdx(size_t cell,
-                        Definitions::edge_index edge);
+                        CleaverCUDA::edge_index edge);
   /**
    * Returns the location of the edge in the edge array
    * given the cell of interest, a direction (up, down, left, right,
@@ -251,7 +214,7 @@ class SimpleGeometry {
    * @return The index of the cube edge array we need for this cell and dir.
    */
   size_t GetAxisEdgeIdx(size_t cell,
-                        Definitions::edge_index edge);
+                        CleaverCUDA::edge_index edge);
   /**
    * Returns the index for the inner face of a cell from a cell index.
    * @param cell The cell index.
@@ -286,11 +249,11 @@ class SimpleGeometry {
                          unsigned char multiple,
                          unsigned char num);
   /** Pointer to the inner diagonal edges. */
-  SimpleEdge   * inner_edges_;
+  CleaverCUDA::Edge   * inner_edges_;
   /** Pointer to the dual edges. */
-  SimpleEdge   * dual_edges_ ;
+  CleaverCUDA::Edge   * dual_edges_ ;
   /** Pointer to the cube (axis) edges. */
-  SimpleEdge   * axis_edges_;
+  CleaverCUDA::Edge   * axis_edges_;
   /** Pointer to the inner faces. */
   SimpleFace   * inner_faces_;
   /** Pointer to the outer faces. */

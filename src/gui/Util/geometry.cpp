@@ -19,10 +19,16 @@ SimpleGeometry::SimpleGeometry(size_t w, size_t h, size_t d, bool verbose)
   size_t total_cells_buf = (w+1) * (h+1) * (d+1);
   //total edges (shared, no duplicates)
   num_inner_edges_ = 8 * total_cells_buf;
-  inner_edges_ = new SimpleEdge[num_inner_edges_];
+  inner_edges_ = new CleaverCUDA::Edge[num_inner_edges_];
   num_dual_edges_ = num_axis_edges_ = 3 * total_cells_buf;
-  dual_edges_ = new SimpleEdge[num_dual_edges_];
-  axis_edges_ = new SimpleEdge[num_axis_edges_];
+  dual_edges_ = new CleaverCUDA::Edge[num_dual_edges_];
+  axis_edges_ = new CleaverCUDA::Edge[num_axis_edges_];
+  for (size_t t = 0; t < num_inner_edges_; t++)
+    inner_edges_[t].isCut_eval = 0;
+  for (size_t t = 0; t < num_dual_edges_; t++)
+    dual_edges_[t].isCut_eval = 0;
+  for (size_t t = 0; t < num_axis_edges_; t++)
+    axis_edges_[t].isCut_eval = 0;
   //total faces (shared, no duplicates, inner and outer)
   num_inner_faces_ = num_outer_faces_ = num_tets_ = 12 * total_cells_buf;
   inner_faces_ = new SimpleFace[num_inner_faces_];
@@ -32,9 +38,9 @@ SimpleGeometry::SimpleGeometry(size_t w, size_t h, size_t d, bool verbose)
       (sizeof(float) * total_cells +
           sizeof(bool) * total_cells +
           sizeof(char) * total_cells +
-          num_inner_edges_ * sizeof(SimpleEdge) +
-          num_dual_edges_ * sizeof(SimpleEdge) +
-          num_axis_edges_ * sizeof(SimpleEdge) +
+          num_inner_edges_ * sizeof(CleaverCUDA::Edge) +
+          num_dual_edges_ * sizeof(CleaverCUDA::Edge) +
+          num_axis_edges_ * sizeof(CleaverCUDA::Edge) +
           num_inner_faces_ * sizeof(SimpleFace) +
           num_outer_faces_ * sizeof(SimpleFace) +
           num_tets_ * sizeof(SimpleTet)) >> 20;
@@ -57,74 +63,6 @@ SimpleGeometry::~SimpleGeometry() {
 bool SimpleGeometry::Valid() {
   return inner_edges_ && dual_edges_ &&
       axis_edges_ && inner_faces_ && outer_faces_ && tets_;
-}
-
-std::array<std::array<float,3>,2> SimpleGeometry::GetEdgeVertices(
-    Definitions::edge_index num,
-    size_t i, size_t j, size_t k,
-    std::array<float,3> scale) {
-  float x = static_cast<float>(i) * scale[0];
-  float y = static_cast<float>(j) * scale[1];
-  float z = static_cast<float>(k) * scale[2];
-  std::array<float,3> v1 = {{x,y,z}};
-  std::array<float,3> v2 = {{x+scale[0],y,z}};
-  std::array<float,3> v3 = {{x,y+scale[1],z}};
-  std::array<float,3> v4 = {{x+scale[0],y+scale[1],z}};
-  std::array<float,3> v5 = {{x,y,z+scale[2]}};
-  std::array<float,3> v6 = {{x+scale[0],y,z+scale[2]}};
-  std::array<float,3> v7 = {{x,y+scale[1],z+scale[2]}};
-  std::array<float,3> v8 = {{x+scale[0],y+scale[1],z+scale[2]}};
-  std::array<float,3> v9 = {{x+.5f * scale[0],
-      y+.5f * scale[1],z+.5f * scale[2]}};
-  std::array<float,3> v10 = {{x-.5f * scale[0],
-      y+.5f * scale[1],z+.5f * scale[2]}};
-  std::array<float,3> v11 = {{x+1.5f * scale[0],
-      y+.5f * scale[1],z+.5f * scale[2]}};
-  std::array<float,3> v12 = {{x+.5f * scale[0],
-      y-.5f * scale[1],z+.5f * scale[2]}};
-  std::array<float,3> v13 = {{x+.5f * scale[0],
-      y+1.5f * scale[1],z+.5f * scale[2]}};
-  std::array<float,3> v14 = {{x+.5f * scale[0],
-      y+.5f * scale[1],z-.5f * scale[2]}};
-  std::array<float,3> v15 = {{x+.5f * scale[0],
-      y+.5f * scale[1],z+1.5f * scale[2]}};
-
-  std::array<std::array<float,3>,2> ans;
-  switch (num) {
-    //diagonal edges upper
-    case Definitions::DULF: ans[0] = v9; ans[1] = v3; break;
-    case Definitions::DULB: ans[0] = v9; ans[1] = v7; break;
-    case Definitions::DURF: ans[0] = v9; ans[1] = v4; break;
-    case Definitions::DURB: ans[0] = v9; ans[1] = v8; break;
-    //diagonal edges lower
-    case Definitions::DLLF: ans[0] = v9; ans[1] = v1; break;
-    case Definitions::DLLB: ans[0] = v9; ans[1] = v5; break;
-    case Definitions::DLRF: ans[0] = v9; ans[1] = v2; break;
-    case Definitions::DLRB: ans[0] = v9; ans[1] = v6; break;
-    //dual edges
-    case Definitions::CL: ans[0] = v10; ans[1] = v9; break;
-    case Definitions::CR: ans[0] = v9; ans[1] = v11; break;
-    case Definitions::CU: ans[0] = v9; ans[1] = v13; break;
-    case Definitions::CD: ans[0] = v12; ans[1] = v9; break;
-    case Definitions::CF: ans[0] = v14; ans[1] = v9; break;
-    case Definitions::CB: ans[0] = v9; ans[1] = v15; break;
-    //top face edges
-    case Definitions::UL: ans[0] = v3; ans[1] = v7; break;
-    case Definitions::UR: ans[0] = v4; ans[1] = v8; break;
-    case Definitions::UF: ans[0] = v3; ans[1] = v4; break;
-    case Definitions::UB: ans[0] = v7; ans[1] = v8; break;
-    //bottom face edges
-    case Definitions::LL: ans[0] = v1; ans[1] = v5; break;
-    case Definitions::LR: ans[0] = v2; ans[1] = v6; break;
-    case Definitions::LF: ans[0] = v1; ans[1] = v2; break;
-    case Definitions::LB: ans[0] = v5; ans[1] = v6; break;
-    //column edges
-    case Definitions::FL: ans[0] = v1; ans[1] = v3; break;
-    case Definitions::FR: ans[0] = v2; ans[1] = v4; break;
-    case Definitions::BL: ans[0] = v5; ans[1] = v7; break;
-    case Definitions::BR: ans[0] = v6; ans[1] = v8; break;
-  }
-  return ans;
 }
 
 std::array<std::array<float,3>,3> SimpleGeometry::GetFaceVertices(
@@ -294,9 +232,9 @@ std::array<std::array<float,3>,4> SimpleGeometry::GetTetVertices(
   return ans;
 }
 
-std::array<SimpleEdge*,3> SimpleGeometry::GetFaceEdges(
+std::array<CleaverCUDA::Edge*,3> SimpleGeometry::GetFaceEdges(
     size_t cell, Definitions::tri_index fnum, Definitions::tet_index tnum) {
-  std::array<Definitions::edge_index,3> edges = GetFaceEdgesNum(fnum);
+  std::array<CleaverCUDA::edge_index,3> edges = GetFaceEdgesNum(fnum);
   int64_t first = cell, second = cell, cel = cell;
   if (tnum < 0 || tnum >23) {
     if (fnum < 12)
@@ -344,14 +282,14 @@ std::array<SimpleEdge*,3> SimpleGeometry::GetFaceEdges(
     else if (19 < tnum && tnum < 24 && 3 < fnum && fnum < 8)
       first = second = cel = cel + w_;
   }
-  std::array<SimpleEdge*,3> out = {{
+  std::array<CleaverCUDA::Edge*,3> out = {{
       GetEdge(first,edges[0]),
       GetEdge(second,edges[1]),
       GetEdge(cel,edges[2]) }};
   return out;
 }
 
-std::array<Definitions::edge_index,3> SimpleGeometry::GetFaceEdgesNum(
+std::array<CleaverCUDA::edge_index,3> SimpleGeometry::GetFaceEdgesNum(
     Definitions::tri_index n) {
   std::array<size_t,3> edges = {{0,0,0}};
   size_t num = static_cast<size_t>(n);
@@ -375,9 +313,9 @@ std::array<Definitions::edge_index,3> SimpleGeometry::GetFaceEdgesNum(
   else
     edges = {{ (((num%4)*2lu)+1lu),
         ((num%4lu)*2lu), ((num<32lu)?12lu:13lu) }};
-  std::array<Definitions::edge_index,3> e;
+  std::array<CleaverCUDA::edge_index,3> e;
   for (size_t a = 0; a < 3; a++)
-    e[a] = static_cast<Definitions::edge_index>(edges[a]);
+    e[a] = static_cast<CleaverCUDA::edge_index>(edges[a]);
   return e;
 }
 
@@ -403,13 +341,13 @@ std::array<SimpleFace*,4> SimpleGeometry::GetTetFaces(
   return out;
 }
 
-std::array<SimpleEdge*,6> SimpleGeometry::GetTetEdges(
+std::array<CleaverCUDA::Edge*,6> SimpleGeometry::GetTetEdges(
     size_t cell, Definitions::tet_index n) {
-  std::array<SimpleEdge*,6> ans;
+  std::array<CleaverCUDA::Edge*,6> ans;
   std::array<Definitions::tri_index,4> fcs = GetTetFacesNum(n);
   size_t idx = 0;
   for (auto a : fcs) {
-    std::array<SimpleEdge*,3> edges = GetFaceEdges(cell,a,n);
+    std::array<CleaverCUDA::Edge*,3> edges = GetFaceEdges(cell,a,n);
     for (auto b: edges) {
       bool found = false;
       for (size_t x = 0; x < idx; x++)
@@ -475,77 +413,40 @@ size_t SimpleGeometry::GetInnerEdgeIdx(size_t cell, size_t edge) {
 }
 
 size_t SimpleGeometry::GetDualEdgeIdx(size_t cell,
-                                      Definitions::edge_index edge){
-  Definitions::cell_index dir;
+                                      CleaverCUDA::edge_index edge){
+  size_t offset = w_*h_*3, num = 0;
   switch (edge) {
-    case Definitions::CL: dir = Definitions::LEFT; break;
-    case Definitions::CR: dir = Definitions::RIGHT; break;
-    case Definitions::CU: dir = Definitions::UP; break;
-    case Definitions::CD: dir = Definitions::DOWN; break;
-    case Definitions::CF: dir = Definitions::FRONT; break;
-    case Definitions::CB: dir = Definitions::BACK; break;
-    default: dir = Definitions::LEFT; break;
+    case CleaverCUDA::CL: offset -= 3;       num = 0; break;
+    case CleaverCUDA::CR: offset -= 0;       num = 0; break;
+    case CleaverCUDA::CU: offset -= 0;       num = 1; break;
+    case CleaverCUDA::CD: offset -= w_*3;    num = 1; break;
+    case CleaverCUDA::CF: offset -= w_*h_*3; num = 2; break;
+    case CleaverCUDA::CB: offset -= 0;       num = 2; break;
+    default:              offset -= 0;       num = 0; break;
   }
-  return OffsetAlgorithm(cell,dir,1,0);
+  return cell * 3 + offset + num;
 }
 
 size_t SimpleGeometry::GetAxisEdgeIdx(size_t cell,
-                                      Definitions::edge_index edge){
+                                      CleaverCUDA::edge_index edge){
 
-  Definitions::cell_index dir;
-  size_t offset = 0;
+  size_t offset = 0, num = 0;
   switch (edge) {
-    case Definitions::UL:
-      dir = Definitions::FRONT;
-      offset = w_;
-      break;
-    case Definitions::UR:
-      dir = Definitions::FRONT;
-      offset = w_ + 1;
-      break;
-    case Definitions::UF:
-      dir = Definitions::RIGHT;
-      offset = w_;
-      break;
-    case Definitions::UB:
-      dir = Definitions::RIGHT;
-      offset = w_ + w_*h_;
-      break;
-    case Definitions::LL:
-      dir = Definitions::FRONT;
-      break;
-    case Definitions::LR:
-      dir = Definitions::FRONT;
-      offset = 1;
-      break;
-    case Definitions::LF:
-      dir = Definitions::RIGHT;
-      break;
-    case Definitions::LB:
-      dir = Definitions::RIGHT;
-      offset = w_*h_;
-      break;
-    case Definitions::FL:
-      dir = Definitions::UP;
-      break;
-    case Definitions::FR:
-      dir = Definitions::UP;
-      offset = 1;
-      break;
-    case Definitions::BL:
-      dir = Definitions::UP;
-      offset = w_*h_;
-      break;
-    case Definitions::BR:
-      dir = Definitions::UP;
-      offset = w_*h_ + 1;
-      break;
-    default:
-      dir = Definitions::FRONT;
-      offset = w_;
-      break;
+    case CleaverCUDA::UL: offset = w_;      num = 2; break;
+    case CleaverCUDA::UR: offset = w_+1;    num = 2; break;
+    case CleaverCUDA::UF: offset = w_;      num = 0; break;
+    case CleaverCUDA::UB: offset = w_*h_+w_;num = 0; break;
+    case CleaverCUDA::LL: offset = 0;       num = 2; break;
+    case CleaverCUDA::LR: offset = 1;       num = 2; break;
+    case CleaverCUDA::LF: offset = 0;       num = 0; break;
+    case CleaverCUDA::LB: offset = w_*h_;   num = 0; break;
+    case CleaverCUDA::FL: offset = 0;       num = 1; break;
+    case CleaverCUDA::FR: offset = 1;       num = 1; break;
+    case CleaverCUDA::BL: offset = w_*h_;   num = 1; break;
+    case CleaverCUDA::BR: offset = w_*h_+1; num = 1; break;
+    default: offset = w_; num = 0; break;
   }
-  return OffsetAlgorithm(cell+offset,dir,1,0);
+  return cell * 3 + offset*3 + num;
 }
 
 size_t SimpleGeometry::OffsetAlgorithm(size_t cell,
@@ -579,8 +480,8 @@ size_t SimpleGeometry::OffsetAlgorithm(size_t cell,
   return cell*multiple_t3 + w_*h_*multiple_t3 - multiple_t2 + offset + num;
 }
 
-SimpleEdge * SimpleGeometry::GetEdge(int64_t cell,
-                                     Definitions::edge_index edge) {
+CleaverCUDA::Edge * SimpleGeometry::GetEdge(int64_t cell,
+                                     CleaverCUDA::edge_index edge) {
   if (edge < 8) {
     cell += w_ * h_;
     return &inner_edges_[GetInnerEdgeIdx(cell,(size_t)edge)];
@@ -590,6 +491,14 @@ SimpleEdge * SimpleGeometry::GetEdge(int64_t cell,
   } else {
     return &axis_edges_[GetAxisEdgeIdx(cell,edge)];
   }
+}
+
+std::array<CleaverCUDA::Edge *,3> SimpleGeometry::GetEdgePointers() {
+  return {{inner_edges_,dual_edges_,axis_edges_}};
+}
+
+std::array<size_t,3> SimpleGeometry::GetEdgePointersSize() {
+  return {{num_inner_edges_,num_dual_edges_,num_axis_edges_}};
 }
 
 SimpleFace * SimpleGeometry::GetFace(int64_t cell,
@@ -682,83 +591,6 @@ std::array<size_t,3> SimpleGeometry::CreateArray(
   return std::array<size_t,3>({{i,j,k}});
 }
 
-std::array<size_t,3> SimpleGeometry::GetAdjacentCellFromEdge(
-    Definitions::edge_index num, bool first,
-    size_t i, size_t j, size_t k) {
-  switch (num) {
-    //Diagonal edges
-    case Definitions::DULF:
-      return CreateArray(i,j+1,k);
-    case Definitions::DULB:
-      return CreateArray(i,j+1,k+1);
-    case Definitions::DURF:
-      return CreateArray(i+1,j+1,k);
-    case Definitions::DURB:
-      return CreateArray(i+1,j+1,k+1);
-    case Definitions::DLLF:
-      return CreateArray(i,j,k);
-    case Definitions::DLLB:
-      return CreateArray(i,j,k+1);
-    case Definitions::DLRF:
-      return CreateArray(i+1,j,k);
-    case Definitions::DLRB:
-      return CreateArray(i+1,j,k+1);
-      //Dual Edges
-    case Definitions::CL:
-      return CreateArray(i-1,j,k);
-    case Definitions::CR:
-      return CreateArray(i+1,j,k);
-    case Definitions::CU:
-      return CreateArray(i,j+1,k);
-    case Definitions::CD:
-      return CreateArray(i,j-1,k);
-    case Definitions::CF:
-      return CreateArray(i,j,k-1);
-    case Definitions::CB:
-      return CreateArray(i,j,k+1);
-      //Axis edges (top)
-    case Definitions::UL:
-      if (first) return CreateArray(i,j+1,k);
-      return CreateArray(i,j+1,k+1);
-    case Definitions::UR:
-      if (first) return CreateArray(i+1,j+1,k);
-      return CreateArray(i+1,j+1,k+1);
-    case Definitions::UF:
-      if (first) return CreateArray(i,j+1,k);
-      return CreateArray(i+1,j+1,k);
-    case Definitions::UB:
-      if (first) return CreateArray(i,j+1,k+1);
-      return CreateArray(i+1,j+1,k+1);
-      //axis edges (bottom)
-    case Definitions::LL:
-      if (first) return CreateArray(i,j,k);
-      return CreateArray(i,j,k+1);
-    case Definitions::LR:
-      if (first) return CreateArray(i+1,j,k);
-      return CreateArray(i+1,j,k+1);
-    case Definitions::LF:
-      if (first) return CreateArray(i,j,k);
-      return CreateArray(i+1,j,k);
-    case Definitions::LB:
-      if (first) return CreateArray(i,j,k+1);
-      return CreateArray(i+1,j,k+1);
-      //axis edges (columns)
-    case Definitions::FL:
-      if (first) return CreateArray(i,j,k);
-      return CreateArray(i,j+1,k);
-    case Definitions::FR:
-      if (first) return CreateArray(i+1,j,k);
-      return CreateArray(i+1,j+1,k);
-    case Definitions::BL:
-      if (first) return CreateArray(i,j,k+1);
-      return CreateArray(i,j+1,k+1);
-    case Definitions::BR:
-      if (first) return CreateArray(i+1,j,k+1);
-      return CreateArray(i+1,j+1,k+1);
-  }
-  return CreateArray(0,0,0);
-}
-
 void SimpleGeometry::TestCells() {
   try {
     size_t total_cells = w_*h_*d_;
@@ -768,148 +600,148 @@ void SimpleGeometry::TestCells() {
       ///////////////TESTING EDGES
       //inner diagonal edges must exist
       for (size_t j = 0; j < 8; j++)
-        if (!GetEdge(i,(Definitions::edge_index)j))
+        if (!GetEdge(i,(CleaverCUDA::edge_index)j))
           std::cerr << "Edge problem at cell: " << i << "Edge: " << j << std::endl;
       //Test ALL positive dual edges
-      if (GetEdge(i,Definitions::CR) !=
-          GetEdge(i+1,Definitions::CL))
+      if (GetEdge(i,CleaverCUDA::CR) !=
+          GetEdge(i+1,CleaverCUDA::CL))
         std::cerr << "CR/CL Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::CU) !=
-          GetEdge(i+w,Definitions::CD))
+      if (GetEdge(i,CleaverCUDA::CU) !=
+          GetEdge(i+w,CleaverCUDA::CD))
         std::cerr << "CU/CD Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::CB) !=
-          GetEdge(i+w*h,Definitions::CF))
+      if (GetEdge(i,CleaverCUDA::CB) !=
+          GetEdge(i+w*h,CleaverCUDA::CF))
         std::cerr << "CB/CF Edge problem at : " << i << std::endl;
       // Test all negative Dual edges if possible
-      if (i >= 1 && GetEdge(i,Definitions::CL) !=
-          GetEdge(i-1,Definitions::CR))
+      if (i >= 1 && GetEdge(i,CleaverCUDA::CL) !=
+          GetEdge(i-1,CleaverCUDA::CR))
         std::cerr << "CL/CR Edge problem at : " << i << std::endl;
-      if (i >= w && GetEdge(i,Definitions::CD) !=
-          GetEdge(i-w,Definitions::CU))
+      if (i >= w && GetEdge(i,CleaverCUDA::CD) !=
+          GetEdge(i-w,CleaverCUDA::CU))
         std::cerr << "CR/CL Edge problem at : " << i << std::endl;
-      if (i >= w*h && GetEdge(i,Definitions::CF) !=
-          GetEdge(i-w*h,Definitions::CB))
+      if (i >= w*h && GetEdge(i,CleaverCUDA::CF) !=
+          GetEdge(i-w*h,CleaverCUDA::CB))
         std::cerr << "CB/CF Edge problem at : " << i << std::endl;
       //TEST ALL AXIS EDGES
       // upper left
-      if (i >= 1 && GetEdge(i,Definitions::UL) !=
-          GetEdge(i-1,Definitions::UR))
+      if (i >= 1 && GetEdge(i,CleaverCUDA::UL) !=
+          GetEdge(i-1,CleaverCUDA::UR))
         std::cerr << "UL/UR Edge problem at : " << i << std::endl;
-      if (i >= 1-w && GetEdge(i,Definitions::UL) !=
-          GetEdge(i-1+w,Definitions::LR))
+      if (i >= 1-w && GetEdge(i,CleaverCUDA::UL) !=
+          GetEdge(i-1+w,CleaverCUDA::LR))
         std::cerr << "UL/LR Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::UL) !=
-          GetEdge(i+w,Definitions::LL))
+      if (GetEdge(i,CleaverCUDA::UL) !=
+          GetEdge(i+w,CleaverCUDA::LL))
         std::cerr << "UL/LL Edge problem at : " << i << std::endl;
       // upper right
-      if (GetEdge(i,Definitions::UR) !=
-          GetEdge(i+1,Definitions::UL))
+      if (GetEdge(i,CleaverCUDA::UR) !=
+          GetEdge(i+1,CleaverCUDA::UL))
         std::cerr << "UR/UL Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::UR) !=
-          GetEdge(i+w,Definitions::LR))
+      if (GetEdge(i,CleaverCUDA::UR) !=
+          GetEdge(i+w,CleaverCUDA::LR))
         std::cerr << "UR/LR Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::UR) !=
-          GetEdge(i+w+1,Definitions::LL))
+      if (GetEdge(i,CleaverCUDA::UR) !=
+          GetEdge(i+w+1,CleaverCUDA::LL))
         std::cerr << "UR/LL Edge problem at : " << i << std::endl;
       //upper front
-      if (GetEdge(i,Definitions::UF) !=
-          GetEdge(i+w,Definitions::LF))
+      if (GetEdge(i,CleaverCUDA::UF) !=
+          GetEdge(i+w,CleaverCUDA::LF))
         std::cerr << "UF/LF Edge problem at : " << i << std::endl;
-      if (i >= w*h && GetEdge(i,Definitions::UF) !=
-          GetEdge(i-w*h,Definitions::UB))
+      if (i >= w*h && GetEdge(i,CleaverCUDA::UF) !=
+          GetEdge(i-w*h,CleaverCUDA::UB))
         std::cerr << "UF/UB Edge problem at : " << i << std::endl;
-      if (i>=w*h-w && GetEdge(i,Definitions::UF) !=
-          GetEdge(i+w-w*h,Definitions::LB))
+      if (i>=w*h-w && GetEdge(i,CleaverCUDA::UF) !=
+          GetEdge(i+w-w*h,CleaverCUDA::LB))
         std::cerr << "UF/LF Edge problem at : " << i << std::endl;
       //upper back
-      if (GetEdge(i,Definitions::UB) !=
-          GetEdge(i+w*h,Definitions::UF))
+      if (GetEdge(i,CleaverCUDA::UB) !=
+          GetEdge(i+w*h,CleaverCUDA::UF))
         std::cerr << "UB/UF Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::UB) !=
-          GetEdge(i+w*h+w,Definitions::LF))
+      if (GetEdge(i,CleaverCUDA::UB) !=
+          GetEdge(i+w*h+w,CleaverCUDA::LF))
         std::cerr << "UB/LF Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::UB) !=
-          GetEdge(i+w,Definitions::LB))
+      if (GetEdge(i,CleaverCUDA::UB) !=
+          GetEdge(i+w,CleaverCUDA::LB))
         std::cerr << "UB/LB Edge problem at : " << i << std::endl;
       //lower left
-      if (i>=1 && GetEdge(i,Definitions::LL) !=
-          GetEdge(i-1,Definitions::LR))
+      if (i>=1 && GetEdge(i,CleaverCUDA::LL) !=
+          GetEdge(i-1,CleaverCUDA::LR))
         std::cerr << "LL/LR Edge problem at : " << i << std::endl;
-      if (i>=1+w && GetEdge(i,Definitions::LL) !=
-          GetEdge(i-1-w,Definitions::UR))
+      if (i>=1+w && GetEdge(i,CleaverCUDA::LL) !=
+          GetEdge(i-1-w,CleaverCUDA::UR))
         std::cerr << "LL/UR Edge problem at : " << i << std::endl;
-      if (i>=w && GetEdge(i,Definitions::LL) !=
-          GetEdge(i-w,Definitions::UL))
+      if (i>=w && GetEdge(i,CleaverCUDA::LL) !=
+          GetEdge(i-w,CleaverCUDA::UL))
         std::cerr << "LL/UL Edge problem at : " << i << std::endl;
       //lower right
-      if (GetEdge(i,Definitions::LR) !=
-          GetEdge(i+1,Definitions::LL))
+      if (GetEdge(i,CleaverCUDA::LR) !=
+          GetEdge(i+1,CleaverCUDA::LL))
         std::cerr << "LR/LL Edge problem at : " << i << std::endl;
-      if (i>=w && GetEdge(i,Definitions::LR) !=
-          GetEdge(i-w,Definitions::UR))
+      if (i>=w && GetEdge(i,CleaverCUDA::LR) !=
+          GetEdge(i-w,CleaverCUDA::UR))
         std::cerr << "LR/UR Edge problem at : " << i << std::endl;
-      if (i>=w-1 && GetEdge(i,Definitions::LR) !=
-          GetEdge(i-w+1,Definitions::UL))
+      if (i>=w-1 && GetEdge(i,CleaverCUDA::LR) !=
+          GetEdge(i-w+1,CleaverCUDA::UL))
         std::cerr << "LR/UL Edge problem at : " << i << std::endl;
       //lower front
-      if (i>=w*h && GetEdge(i,Definitions::LF) !=
-          GetEdge(i-w*h,Definitions::LB))
+      if (i>=w*h && GetEdge(i,CleaverCUDA::LF) !=
+          GetEdge(i-w*h,CleaverCUDA::LB))
         std::cerr << "LF/LB Edge problem at : " << i << std::endl;
-      if (i>=w*h+w && GetEdge(i,Definitions::LF) !=
-          GetEdge(i-w*h-w,Definitions::UB))
+      if (i>=w*h+w && GetEdge(i,CleaverCUDA::LF) !=
+          GetEdge(i-w*h-w,CleaverCUDA::UB))
         std::cerr << "LF/UB Edge problem at : " << i << std::endl;
-      if (i>=w && GetEdge(i,Definitions::LF) !=
-          GetEdge(i-w,Definitions::UF))
+      if (i>=w && GetEdge(i,CleaverCUDA::LF) !=
+          GetEdge(i-w,CleaverCUDA::UF))
         std::cerr << "LF/LB Edge problem at : " << i << std::endl;
       //lower back
-      if (i>=w && GetEdge(i,Definitions::LB) !=
-          GetEdge(i-w,Definitions::UB))
+      if (i>=w && GetEdge(i,CleaverCUDA::LB) !=
+          GetEdge(i-w,CleaverCUDA::UB))
         std::cerr << "LB/UB Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::LB) !=
-          GetEdge(i+w*h,Definitions::LF))
+      if (GetEdge(i,CleaverCUDA::LB) !=
+          GetEdge(i+w*h,CleaverCUDA::LF))
         std::cerr << "LB/LF Edge problem at : " << i << std::endl;
-      if (i>=w-w*h && GetEdge(i,Definitions::LB) !=
-          GetEdge(i-w+w*h,Definitions::UF))
+      if (i>=w-w*h && GetEdge(i,CleaverCUDA::LB) !=
+          GetEdge(i-w+w*h,CleaverCUDA::UF))
         std::cerr << "LB/UF Edge problem at : " << i << std::endl;
       //front left
-      if (i>=1 && GetEdge(i,Definitions::FL) !=
-          GetEdge(i-1,Definitions::FR))
+      if (i>=1 && GetEdge(i,CleaverCUDA::FL) !=
+          GetEdge(i-1,CleaverCUDA::FR))
         std::cerr << "FL/FR Edge problem at : " << i << std::endl;
-      if (i>=1+w*h && GetEdge(i,Definitions::FL) !=
-          GetEdge(i-1-w*h,Definitions::BR))
+      if (i>=1+w*h && GetEdge(i,CleaverCUDA::FL) !=
+          GetEdge(i-1-w*h,CleaverCUDA::BR))
         std::cerr << "FL/BR Edge problem at : " << i << std::endl;
-      if (i>=w*h && GetEdge(i,Definitions::FL) !=
-          GetEdge(i-w*h,Definitions::BL))
+      if (i>=w*h && GetEdge(i,CleaverCUDA::FL) !=
+          GetEdge(i-w*h,CleaverCUDA::BL))
         std::cerr << "FL/BL Edge problem at : " << i << std::endl;
       //front right
-      if (GetEdge(i,Definitions::FR) !=
-          GetEdge(i+1,Definitions::FL))
+      if (GetEdge(i,CleaverCUDA::FR) !=
+          GetEdge(i+1,CleaverCUDA::FL))
         std::cerr << "FR/FL Edge problem at : " << i << std::endl;
-      if (i>=w*h && GetEdge(i,Definitions::FR) !=
-          GetEdge(i-w*h,Definitions::BR))
+      if (i>=w*h && GetEdge(i,CleaverCUDA::FR) !=
+          GetEdge(i-w*h,CleaverCUDA::BR))
         std::cerr << "FR/BR Edge problem at : " << i << std::endl;
-      if (i>=w*h-1 && GetEdge(i,Definitions::FR) !=
-          GetEdge(i-w*h+1,Definitions::BL))
+      if (i>=w*h-1 && GetEdge(i,CleaverCUDA::FR) !=
+          GetEdge(i-w*h+1,CleaverCUDA::BL))
         std::cerr << "FR/BL Edge problem at : " << i << std::endl;
       //back left
-      if (i>=1 && GetEdge(i,Definitions::BL) !=
-          GetEdge(i-1,Definitions::BR))
+      if (i>=1 && GetEdge(i,CleaverCUDA::BL) !=
+          GetEdge(i-1,CleaverCUDA::BR))
         std::cerr << "BL/BR Edge problem at : " << i << std::endl;
-      if (i>=1-w*h && GetEdge(i,Definitions::BL) !=
-          GetEdge(i-1+w*h,Definitions::FR))
+      if (i>=1-w*h && GetEdge(i,CleaverCUDA::BL) !=
+          GetEdge(i-1+w*h,CleaverCUDA::FR))
         std::cerr << "BL/FR Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::BL) !=
-          GetEdge(i+w*h,Definitions::FL))
+      if (GetEdge(i,CleaverCUDA::BL) !=
+          GetEdge(i+w*h,CleaverCUDA::FL))
         std::cerr << "BL/FL Edge problem at : " << i << std::endl;
       //back right
-      if (GetEdge(i,Definitions::BR) !=
-          GetEdge(i+1,Definitions::BL))
+      if (GetEdge(i,CleaverCUDA::BR) !=
+          GetEdge(i+1,CleaverCUDA::BL))
         std::cerr << "BR/BL Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::BR) !=
-          GetEdge(i+1+w*h,Definitions::FL))
+      if (GetEdge(i,CleaverCUDA::BR) !=
+          GetEdge(i+1+w*h,CleaverCUDA::FL))
         std::cerr << "BR/FL Edge problem at : " << i << std::endl;
-      if (GetEdge(i,Definitions::BR) !=
-          GetEdge(i+w*h,Definitions::FR))
+      if (GetEdge(i,CleaverCUDA::BR) !=
+          GetEdge(i+w*h,CleaverCUDA::FR))
         std::cerr << "BR/FR Edge problem at : " << i << std::endl;
       //////////////TESTING FACES
       for (size_t j = 0; j < 4; j++) {
@@ -953,7 +785,7 @@ void SimpleGeometry::TestCells() {
           ", " << j << std::endl;
         ////////////////////TESTING GET EDGES FROM FACE
         Definitions::tri_index f1,f2;
-        std::array<SimpleEdge*,3> e1, e2;
+        std::array<CleaverCUDA::Edge*,3> e1, e2;
         //test outer left
         if(i >= 1) {
           f1 = (Definitions::tri_index)(j+12);

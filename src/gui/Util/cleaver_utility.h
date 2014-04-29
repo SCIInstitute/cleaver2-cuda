@@ -9,6 +9,7 @@
 #include <cstring>
 #include <vector>
 #include "geometry.h"
+#include "cleaver_cuda.hh"
 
 class CleaverUtility {
  public:
@@ -102,7 +103,7 @@ class CleaverUtility {
   std::pair<std::vector<std::array<float,3>>,
   std::vector<std::array<size_t,4>>> GetVertsFacesFromNRRD(
       std::vector<std::string> &files,
-      std::array<float,3> &scales,
+      float scales[3],
       std::array<size_t,3> &abs,
       bool useScale, bool useAbs, bool useGPU);
   /**
@@ -133,18 +134,6 @@ class CleaverUtility {
   void AccumulateVertsAndFaces(
       SimpleTet * tet, Definitions::tet_index num,
       size_t i, size_t j, size_t k, SimpleGeometry& geos);
-  /**
-   * Computes the cut of an edge.
-   * @param edge The edge we are working on.
-   * @param num The Edge index.
-   * @param i The x location in the block.
-   * @param j The y location in the block.
-   * @param k The z location in the block.
-   */
-  void CalculateCut(SimpleEdge *edge,
-                    Definitions::edge_index num,
-                    size_t i, size_t j, size_t k,
-                    SimpleGeometry& geos);
   /**
    * Computes the triple of a face.
    * @param face The edge we are working on.
@@ -182,42 +171,6 @@ class CleaverUtility {
    * Prints information about the program and how to use it.
    */
   void PrintHelp();
-  /**
-   * Transforms the data to meet the Cleaver1 calculations.
-   * @param i The x location in the block.
-   * @param j The y location in the block.
-   * @param k The z location in the block.
-   * @param m The desired material.
-   * @return The transformed float of data.
-   */
-  float DataTransform(float i, float j, float k, size_t m);
-  /**
-   * Gets the center value of a given material at a given cell position.
-   * @param i The x location in the block.
-   * @param j The y location in the block.
-   * @param k The z location in the block.
-   * @param m The material to grab, or if finding max,the # of materials.
-   * @param find_max Whether to find the max material, or just the given one.
-   * @return Returns the center vertex material and value (max or given).
-   */
-  std::pair<char,float> GetCellCenterValue(size_t i, size_t j, size_t k,
-                                           size_t m,  bool find_max);
-  /**
-   * Finds the material and value of that material at a given
-   * vertex of an edge.
-   * @param num The edge of interest.
-   * @param first Whether we want the first or second vertex on the edge.
-   * @param find_max Whether we want to find the max, or a particular material.
-   * @param i The x location in the block.
-   * @param j The y location in the block.
-   * @param k The z location in the block.
-   * @param m The number of materials, or the material to grab (must
-   *    be in range).
-   * @return Returns the pair of the edge's vertex material and value.
-   */
-  std::pair<char,float> GetEdgeMatAndValueAtEndpoint(
-      Definitions::edge_index num, bool first, bool find_max,
-      size_t i, size_t j, size_t k, size_t m);
   /** The list of input files. */
   std::vector<std::string> inputs_;
   /** The name of the ouput file. */
@@ -233,7 +186,7 @@ class CleaverUtility {
   /** The 3 absolute resolution values. */
   std::array<size_t,3> res_;
   /** The 3 scaled resolution values. */
-  std::array<float,3> scale_;
+  float scale_[3];
   /** The pointer to all of the float data. */
   float * data_;
   /** The pointer to the data scales.*/
@@ -262,6 +215,10 @@ class CleaverUtility {
   std::vector<std::array<size_t,4>> faces_;
   /** Whether to call the GPU or not. */
   bool use_GPU_;
+  /** An array of 3 pointers used more than once for GPU */
+  void* device_pointers_[3];
+  /** A pointer to the data scales for GPU use */
+  float* scalesP_;
 
 };
 
