@@ -473,8 +473,9 @@ void CleaverUtility::FindMaxes() {
   clock_t start = clock();
 #ifdef CUDA_FOUND
   if (use_GPU_) {
-    CleaverCUDA::CallCUDAMaxes(data_,ww_,hh_,dd_,m_,labels_,
-                               w_,h_,d_,scalesP_,scale_,device_pointers_);
+    CleaverCUDA::CallCUDAMaxes(data_,scalesP_,scale_,
+                               ww_,hh_,dd_,m_,labels_,
+                               w_,h_,d_,device_pointers_);
     double duration = ((double)clock() -
         (double)start) / (double)CLOCKS_PER_SEC;
     if (verbose_)
@@ -562,33 +563,37 @@ void CleaverUtility::CalculateCuts(SimpleGeometry&  geos) {
 #ifdef CUDA_FOUND
   if (use_GPU_) {
     size_t count_cuts =
-        //        CleaverCUDA::CallCUDACuts(device_pointers_[0],
-        //                               ww_,hh_,dd_,m_,
-        //                               w_,h_,d_,
-        //                               device_pointers_[1],
-        //                               device_pointers_[2],
-        //                               (CleaverCUDA::Edge*)
-        //                               geos.GetEdgePointers()[0],
-        //                               (CleaverCUDA::Edge*)
-        //                               geos.GetEdgePointers()[1],
-        //                               (CleaverCUDA::Edge*)
-        //                               geos.GetEdgePointers()[2]);
-        CleaverCUDA::CallCUDACuts(data_,
+        CleaverCUDA::CallCUDACuts(device_pointers_[0],
+                                  device_pointers_[1],
+                                  device_pointers_[2],
                                   ww_,hh_,dd_,m_,
                                   w_,h_,d_,
-                                  scalesP_,
-                                  scale_,
-                                  (CleaverCUDA::Edge*)
                                   geos.GetEdgePointers()[0],
-                                  (CleaverCUDA::Edge*)
                                   geos.GetEdgePointers()[1],
-                                  (CleaverCUDA::Edge*)
-                                  geos.GetEdgePointers()[2]);
+                                  geos.GetEdgePointers()[2],
+                                  cut_cells_);
+//            CleaverCUDA::CallCUDACuts(data_,
+//                                      scalesP_,
+//                                      scale_,
+//                                      ww_,hh_,dd_,m_,
+//                                      w_,h_,d_,
+//                                      geos.GetEdgePointers()[0],
+//                                      geos.GetEdgePointers()[1],
+//                                      geos.GetEdgePointers()[2],
+//                                      cut_cells_);
+    //    for (size_t tt = 0; tt < 3; tt++)
+    //      for (size_t t = 0; t < geos.GetEdgePointersSize()[tt]; t++)
+    //        if((geos.GetEdgePointers()[tt][t].isCut_eval & CleaverCUDA::kIsCut))
+    //          std::cout << tt << " - " <<t << " : " <<
+    //          (int)geos.GetEdgePointers()[tt][t].isCut_eval
+    //          << " -- " << geos.GetEdgePointers()[tt][t].cut_loc[0] << ", "
+    //          << geos.GetEdgePointers()[tt][t].cut_loc[1] << ", " <<
+    //          geos.GetEdgePointers()[tt][t].cut_loc[2] << "\n";
     double duration = ((double)clock() - (double)start) /
         (double)CLOCKS_PER_SEC;
     if (verbose_)
       std::cout << "Found all Cuts: (" << count_cuts << ")\t" <<
-      ((count_cuts < 10000)?"\t":"") << duration << " sec." << std::endl;
+      ((count_cuts < 100000)?"\t":"") << duration << " sec." << std::endl;
     return;
   }
 #endif
@@ -598,8 +603,8 @@ void CleaverUtility::CalculateCuts(SimpleGeometry&  geos) {
       for(size_t k = 0; k < d_; k ++) {
         if(cut_cells_[Idx3(i,j,k)]) {
           for(size_t l = 0; l < Definitions::kEdgesPerCell; l++) {
-            CleaverCUDA::Edge* edge = geos.GetEdge(Idx3(i,j,k),
-                                                   (CleaverCUDA::edge_index)l);
+            CleaverCUDA::Edge* edge =
+                geos.GetEdge(Idx3(i,j,k),(CleaverCUDA::edge_index)l);
             if(!(edge->isCut_eval & CleaverCUDA::kIsEvaluated)) {
               CleaverCUDA::FindEdgeCutCUDA(
                   data_,scalesP_,scale_,ww_,hh_,dd_,m_,i,j,k,edge,
@@ -609,11 +614,19 @@ void CleaverUtility::CalculateCuts(SimpleGeometry&  geos) {
           }
         }
       }
+  //  for (size_t tt = 0; tt < 3; tt++)
+  //    for (size_t t = 0; t < geos.GetEdgePointersSize()[tt]; t++)
+  //      if((geos.GetEdgePointers()[tt][t].isCut_eval & CleaverCUDA::kIsCut))
+  //        std::cout << tt << " - " <<t << " : " <<
+  //        (int)geos.GetEdgePointers()[tt][t].isCut_eval
+  //        << " -- " << geos.GetEdgePointers()[tt][t].cut_loc[0] << ", "
+  //        << geos.GetEdgePointers()[tt][t].cut_loc[1] << ", " <<
+  //        geos.GetEdgePointers()[tt][t].cut_loc[2] << "\n";
   double duration = ((double)clock() -
       (double)start) / (double)CLOCKS_PER_SEC;
   if (verbose_)
     std::cout << "Found all Cuts: (" << count_cuts << ")\t" <<
-    ((count_cuts < 10000)?"\t":"") << duration << " sec." << std::endl;
+    ((count_cuts < 100000)?"\t":"") << duration << " sec." << std::endl;
 }
 
 std::array<float,3> CleaverUtility::FindTriplePoint(

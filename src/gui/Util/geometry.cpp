@@ -23,12 +23,24 @@ SimpleGeometry::SimpleGeometry(size_t w, size_t h, size_t d, bool verbose)
   num_dual_edges_ = num_axis_edges_ = 3 * total_cells_buf;
   dual_edges_ = new CleaverCUDA::Edge[num_dual_edges_];
   axis_edges_ = new CleaverCUDA::Edge[num_axis_edges_];
-  for (size_t t = 0; t < num_inner_edges_; t++)
+  for (size_t t = 0; t < num_inner_edges_; t++) {
     inner_edges_[t].isCut_eval = 0;
-  for (size_t t = 0; t < num_dual_edges_; t++)
+    inner_edges_[t].cut_loc[0] =
+        inner_edges_[t].cut_loc[1] =
+            inner_edges_[t].cut_loc[2] = 0.0;
+  }
+  for (size_t t = 0; t < num_dual_edges_; t++) {
     dual_edges_[t].isCut_eval = 0;
-  for (size_t t = 0; t < num_axis_edges_; t++)
+    dual_edges_[t].cut_loc[0] =
+        dual_edges_[t].cut_loc[1] =
+            dual_edges_[t].cut_loc[2] = 0.0;
+  }
+  for (size_t t = 0; t < num_axis_edges_; t++) {
     axis_edges_[t].isCut_eval = 0;
+    axis_edges_[t].cut_loc[0] =
+        axis_edges_[t].cut_loc[1] =
+            axis_edges_[t].cut_loc[2] = 0.0;
+  }
   //total faces (shared, no duplicates, inner and outer)
   num_inner_faces_ = num_outer_faces_ = num_tets_ = 12 * total_cells_buf;
   inner_faces_ = new SimpleFace[num_inner_faces_];
@@ -414,17 +426,17 @@ size_t SimpleGeometry::GetInnerEdgeIdx(size_t cell, size_t edge) {
 
 size_t SimpleGeometry::GetDualEdgeIdx(size_t cell,
                                       CleaverCUDA::edge_index edge){
-  size_t offset = w_*h_*3, num = 0;
+  size_t offset = 0, num = 0;
   switch (edge) {
-    case CleaverCUDA::CL: offset -= 3;       num = 0; break;
-    case CleaverCUDA::CR: offset -= 0;       num = 0; break;
-    case CleaverCUDA::CU: offset -= 0;       num = 1; break;
-    case CleaverCUDA::CD: offset -= w_*3;    num = 1; break;
-    case CleaverCUDA::CF: offset -= w_*h_*3; num = 2; break;
-    case CleaverCUDA::CB: offset -= 0;       num = 2; break;
-    default:              offset -= 0;       num = 0; break;
+    case CleaverCUDA::CL: offset += 0;       num = 0; break;
+    case CleaverCUDA::CR: offset += 1;       num = 0; break;
+    case CleaverCUDA::CU: offset += w_;      num = 1; break;
+    case CleaverCUDA::CD: offset += 0;       num = 1; break;
+    case CleaverCUDA::CF: offset += 0;       num = 2; break;
+    case CleaverCUDA::CB: offset += w_*h_;   num = 2; break;
+    default:              offset += 0;       num = 0; break;
   }
-  return cell * 3 + offset + num;
+  return cell * 3 + offset*3 + num;
 }
 
 size_t SimpleGeometry::GetAxisEdgeIdx(size_t cell,
@@ -444,7 +456,7 @@ size_t SimpleGeometry::GetAxisEdgeIdx(size_t cell,
     case CleaverCUDA::FR: offset = 1;       num = 1; break;
     case CleaverCUDA::BL: offset = w_*h_;   num = 1; break;
     case CleaverCUDA::BR: offset = w_*h_+1; num = 1; break;
-    default: offset = w_; num = 0; break;
+    default:              offset = 0;       num = 0; break;
   }
   return cell * 3 + offset*3 + num;
 }
@@ -482,11 +494,10 @@ size_t SimpleGeometry::OffsetAlgorithm(size_t cell,
 
 CleaverCUDA::Edge * SimpleGeometry::GetEdge(int64_t cell,
                                      CleaverCUDA::edge_index edge) {
+  cell += w_ * h_;
   if (edge < 8) {
-    cell += w_ * h_;
     return &inner_edges_[GetInnerEdgeIdx(cell,(size_t)edge)];
   } else if (edge < 14) {
-    cell += w_ * h_;
     return &dual_edges_[GetDualEdgeIdx(cell,edge)];
   } else {
     return &axis_edges_[GetAxisEdgeIdx(cell,edge)];
