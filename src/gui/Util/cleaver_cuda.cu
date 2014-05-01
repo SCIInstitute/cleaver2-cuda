@@ -506,11 +506,11 @@ void FindEdgeCutsCUDA(
 
   size_t idx =
       blockIdx.x       +
-      blockIdx.y * kGPUSize  +
-      blockIdx.z * kBlockSize  +
-      threadIdx.x  * kBlockSize * kGPUSize  +
-      threadIdx.y  * kBlockSize * kBlockSize +
-      threadIdx.z  * kBlockSize * kBlockSize * kGPUSize;
+      blockIdx.y * gridDim.x  +
+      blockIdx.z * gridDim.x * gridDim.y  +
+      threadIdx.x  * gridDim.x * gridDim.y * gridDim.z  +
+      threadIdx.y  * gridDim.x * gridDim.y * gridDim.z * blockDim.x +
+      threadIdx.z  * gridDim.x * gridDim.y * gridDim.z * blockDim.x * blockDim.y;
 
   size_t x = idx % kBlockSize;
   size_t y = ((idx - x) / kBlockSize) % kBlockSize;
