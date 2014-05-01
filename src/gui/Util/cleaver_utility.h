@@ -105,7 +105,7 @@ class CleaverUtility {
       std::vector<std::string> &files,
       float scales[3],
       std::array<size_t,3> &abs,
-      bool useScale, bool useAbs, bool useGPU);
+      bool useScale, bool useAbs, bool useGPU, bool addAir);
   /**
    * Parses command line input, but does the same as overloaded
    * method above.
@@ -219,6 +219,8 @@ class CleaverUtility {
   void* device_pointers_[3];
   /** A pointer to the data scales for GPU use */
   float* scalesP_;
+  /** A bool to decide to add "air" material or not. */
+  bool addAir_;
 
 };
 

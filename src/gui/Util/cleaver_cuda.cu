@@ -23,7 +23,7 @@ void CudaCheckReturn(cudaError_t val) {
 }
 
 __device__ __host__
-float CUDADataTransform(float *data_,
+float DataTransformCUDA(float *data_,
                         float i, float j, float k,
                         size_t mm, size_t m, float* scales,
                         float* scale,
@@ -129,30 +129,34 @@ void FindMaxesCUDA(void *input_device_memory,
   float* scale = (float*)device_scale;
   char* labels = (char*)output_device_memory;
 
+  size_t grid_max = gridDim.x * gridDim.y * gridDim.z;
+
   size_t idx =
       blockIdx.x       +
-      blockIdx.y * kGPUSize  +
-      blockIdx.z * kBlockSize  +
-      threadIdx.x  * kBlockSize * kGPUSize  +
-      threadIdx.y  * kBlockSize * kBlockSize +
-      threadIdx.z  * kBlockSize * kBlockSize * kGPUSize;
+      blockIdx.y * gridDim.x  +
+      blockIdx.z * gridDim.x * gridDim.y  +
+      threadIdx.x  * grid_max  +
+      threadIdx.y  * grid_max * blockDim.x +
+      threadIdx.z  * grid_max * blockDim.x * blockDim.y;
 
-  size_t x = idx % kBlockSize;
-  size_t y = ((idx - x) / kBlockSize) % kBlockSize;
-  size_t z = (idx - x - y * kBlockSize) / kBlockSize / kBlockSize;
+  size_t x = idx % kChunkSize;
+  idx -= x; idx /= kChunkSize;
+  size_t y = idx % kChunkSize;
+  idx -= y; idx /= kChunkSize;
+  size_t z = idx % kChunkSize;
 
   //  for (size_t x = 0; x < (kBlockSize); x++ )
   //    for (size_t y = 0; y < (kBlockSize); y++ )
   //      for (size_t z = 0; z < (kBlockSize); z++ )
   if ((x < endi - i) && (y < endj - j) && (z < endk - k))
     labels[x +
-           y * kBlockSize +
-           z * kBlockSize * kBlockSize] =
-               GetLabel(data_,scales, scale,i+x,j+y,k+z,m,w,h,d);
+           y * kChunkSize +
+           z * kChunkSize * kChunkSize] =
+               GetLabelCUDA(data_,scales, scale,i+x,j+y,k+z,m,w,h,d);
 }
 
 __device__ __host__
-float GetCellCenterValue(
+float GetCellCenterValueCUDA(
     float* data_, float* scales, float* scale,
     size_t i, size_t j, size_t k,
     size_t m, size_t num_mats,
@@ -160,7 +164,7 @@ float GetCellCenterValue(
     size_t w, size_t h, size_t d) {
   if (!find_max) {
     *max_mat = m;
-    return CUDADataTransform(
+    return DataTransformCUDA(
         data_,
         static_cast<float>(i)+0.5f,
         static_cast<float>(j)+0.5f,
@@ -168,14 +172,14 @@ float GetCellCenterValue(
         m,num_mats,scales,scale,w,h,d);
   }
   char mat = 0;
-  float tmp, val = CUDADataTransform(
+  float tmp, val = DataTransformCUDA(
       data_,
       static_cast<float>(i)+0.5f,
       static_cast<float>(j)+0.5f,
       static_cast<float>(k)+0.5f,
       0,num_mats,scales,scale,w,h,d);
   for(size_t a = 1; a < num_mats; a++) {
-    if ((tmp = CUDADataTransform(
+    if ((tmp = DataTransformCUDA(
         data_,
         static_cast<float>(i)+0.5f,
         static_cast<float>(j)+0.5f,
@@ -190,125 +194,125 @@ float GetCellCenterValue(
 }
 
 __device__ __host__
-void SetArray(size_t *cell, size_t i, size_t j, size_t k) {
+void SetArrayCUDA(size_t *cell, size_t i, size_t j, size_t k) {
   cell[0] = i;
   cell[1] = j;
   cell[2] = k;
 }
 
 __device__ __host__
-void GetAdjacentCellFromEdge(
+void GetAdjacentCellFromEdgeCUDA(
     CleaverCUDA::edge_index num, bool first,
     size_t i, size_t j, size_t k, size_t* cell) {
   switch (num) {
     //Diagonal edges
     case CleaverCUDA::DULF:
-      SetArray(cell,i,j+1,k); return;
+      SetArrayCUDA(cell,i,j+1,k); return;
     case CleaverCUDA::DULB:
-      SetArray(cell,i,j+1,k+1); return;
+      SetArrayCUDA(cell,i,j+1,k+1); return;
     case CleaverCUDA::DURF:
-      SetArray(cell,i+1,j+1,k); return;
+      SetArrayCUDA(cell,i+1,j+1,k); return;
     case CleaverCUDA::DURB:
-      SetArray(cell,i+1,j+1,k+1); return;
+      SetArrayCUDA(cell,i+1,j+1,k+1); return;
     case CleaverCUDA::DLLF:
-      SetArray(cell,i,j,k); return;
+      SetArrayCUDA(cell,i,j,k); return;
     case CleaverCUDA::DLLB:
-      SetArray(cell,i,j,k+1); return;
+      SetArrayCUDA(cell,i,j,k+1); return;
     case CleaverCUDA::DLRF:
-      SetArray(cell,i+1,j,k); return;
+      SetArrayCUDA(cell,i+1,j,k); return;
     case CleaverCUDA::DLRB:
-      SetArray(cell,i+1,j,k+1); return;
+      SetArrayCUDA(cell,i+1,j,k+1); return;
       //Dual Edges
     case CleaverCUDA::CL:
-      SetArray(cell,i-1,j,k); return;
+      SetArrayCUDA(cell,i-1,j,k); return;
     case CleaverCUDA::CR:
-      SetArray(cell,i+1,j,k); return;
+      SetArrayCUDA(cell,i+1,j,k); return;
     case CleaverCUDA::CU:
-      SetArray(cell,i,j+1,k); return;
+      SetArrayCUDA(cell,i,j+1,k); return;
     case CleaverCUDA::CD:
-      SetArray(cell,i,j-1,k); return;
+      SetArrayCUDA(cell,i,j-1,k); return;
     case CleaverCUDA::CF:
-      SetArray(cell,i,j,k-1); return;
+      SetArrayCUDA(cell,i,j,k-1); return;
     case CleaverCUDA::CB:
-      SetArray(cell,i,j,k+1); return;
+      SetArrayCUDA(cell,i,j,k+1); return;
       //Axis edges (top)
     case CleaverCUDA::UL:
-      if (first) SetArray(cell,i,j+1,k);
+      if (first) SetArrayCUDA(cell,i,j+1,k);
       else
-        SetArray(cell,i,j+1,k+1);
+        SetArrayCUDA(cell,i,j+1,k+1);
       return;
     case CleaverCUDA::UR:
-      if (first) SetArray(cell, i+1,j+1,k);
+      if (first) SetArrayCUDA(cell, i+1,j+1,k);
       else
-        SetArray(cell,i+1,j+1,k+1);
+        SetArrayCUDA(cell,i+1,j+1,k+1);
       return;
     case CleaverCUDA::UF:
-      if (first) SetArray(cell,i,j+1,k);
+      if (first) SetArrayCUDA(cell,i,j+1,k);
       else
-        SetArray(cell,i+1,j+1,k);
+        SetArrayCUDA(cell,i+1,j+1,k);
       return;
     case CleaverCUDA::UB:
-      if (first) SetArray(cell,i,j+1,k+1);
+      if (first) SetArrayCUDA(cell,i,j+1,k+1);
       else
-        SetArray(cell,i+1,j+1,k+1);
+        SetArrayCUDA(cell,i+1,j+1,k+1);
       return;
       //axis edges (bottom)
     case CleaverCUDA::LL:
-      if (first) SetArray(cell,i,j,k);
+      if (first) SetArrayCUDA(cell,i,j,k);
       else
-        SetArray(cell,i,j,k+1);
+        SetArrayCUDA(cell,i,j,k+1);
       return;
     case CleaverCUDA::LR:
-      if (first) SetArray(cell,i+1,j,k);
+      if (first) SetArrayCUDA(cell,i+1,j,k);
       else
-        SetArray(cell,i+1,j,k+1);
+        SetArrayCUDA(cell,i+1,j,k+1);
       return;
     case CleaverCUDA::LF:
-      if (first) SetArray(cell,i,j,k);
+      if (first) SetArrayCUDA(cell,i,j,k);
       else
-        SetArray(cell,i+1,j,k);
+        SetArrayCUDA(cell,i+1,j,k);
       return;
     case CleaverCUDA::LB:
-      if (first) SetArray(cell,i,j,k+1);
+      if (first) SetArrayCUDA(cell,i,j,k+1);
       else
-        SetArray(cell,i+1,j,k+1);
+        SetArrayCUDA(cell,i+1,j,k+1);
       return;
       //axis edges (columns)
     case CleaverCUDA::FL:
-      if (first) SetArray(cell,i,j,k);
+      if (first) SetArrayCUDA(cell,i,j,k);
       else
-        SetArray(cell,i,j+1,k);
+        SetArrayCUDA(cell,i,j+1,k);
       return;
     case CleaverCUDA::FR:
-      if (first) SetArray(cell,i+1,j,k);
+      if (first) SetArrayCUDA(cell,i+1,j,k);
       else
-        SetArray(cell,i+1,j+1,k);
+        SetArrayCUDA(cell,i+1,j+1,k);
       return;
     case CleaverCUDA::BL:
-      if (first) SetArray(cell,i,j,k+1);
+      if (first) SetArrayCUDA(cell,i,j,k+1);
       else
-        SetArray(cell,i,j+1,k+1);
+        SetArrayCUDA(cell,i,j+1,k+1);
       return;
     case CleaverCUDA::BR:
-      if (first) SetArray(cell,i+1,j,k+1);
+      if (first) SetArrayCUDA(cell,i+1,j,k+1);
       else
-        SetArray(cell,i+1,j+1,k+1);
+        SetArrayCUDA(cell,i+1,j+1,k+1);
       return;
   }
 }
 
 __device__ __host__
-char GetLabel(float* data_, float* scales, float* scale,
+char GetLabelCUDA(float* data_, float* scales, float* scale,
               size_t i, size_t j, size_t k, char num_mats,
               size_t w, size_t h, size_t d) {
-  float max = CUDADataTransform(data_, static_cast<float>(i),
+  float max = DataTransformCUDA(data_, static_cast<float>(i),
                                 static_cast<float>(j),
                                 static_cast<float>(k),
                                 0,num_mats,scales,scale,w,h,d);
   char max_mat = 0;
   for(char t = 1; t < num_mats; t++) {
     float tmp;
-    if ((tmp = CUDADataTransform(data_, static_cast<float>(i),
+    if ((tmp = DataTransformCUDA(data_, static_cast<float>(i),
                                  static_cast<float>(j),
                                  static_cast<float>(k),
                                  t,num_mats,scales,scale,w,h,d)) > max) {
@@ -320,7 +324,7 @@ char GetLabel(float* data_, float* scales, float* scale,
 }
 
 __device__ __host__
-float GetEdgeMatAndValueAtEndpoint(
+float GetEdgeMatAndValueAtEndpointCUDA(
     float* data_, float* scales, float* scale,
     CleaverCUDA::edge_index num, bool first, bool find_max,
     size_t m, size_t num_mats, char* ret_mat,
@@ -328,18 +332,18 @@ float GetEdgeMatAndValueAtEndpoint(
     size_t w, size_t h, size_t d) {
   //find the respective adjacent cell for the vertex we want
   size_t arr[3];
-  CleaverCUDA::GetAdjacentCellFromEdge(num,first,i,j,k,arr);
+  CleaverCUDA::GetAdjacentCellFromEdgeCUDA(num,first,i,j,k,arr);
   //the center value of this cell. (V1)
   char mat;
-  float res = CleaverCUDA::GetCellCenterValue(
+  float res = CleaverCUDA::GetCellCenterValueCUDA(
       data_,scales,scale,i,j,k,
       m,num_mats,find_max,&mat,w,h,d);
   if ((num < 8 && !first) || (num >= 14)) {
     // diagonal edges & second vertex, or axis edges.
-    mat = find_max?CleaverCUDA::GetLabel(
+    mat = find_max?CleaverCUDA::GetLabelCUDA(
         data_,scales,scale,arr[0],arr[1],arr[2],
         num_mats,w,h,d):m;
-    res = CleaverCUDA::CUDADataTransform(
+    res = CleaverCUDA::DataTransformCUDA(
         data_,arr[0],arr[1],arr[2],mat,num_mats,
         scales,scale,w,h,d);
   } else if ((8 <= num && num < 14)) { // dual edges
@@ -349,7 +353,7 @@ float GetEdgeMatAndValueAtEndpoint(
         (num == CleaverCUDA::CF);
     if (neg) first = !first;       // flip first if we are on the negative edge
     if (!first)                    // second vertex
-      res = CleaverCUDA::GetCellCenterValue(
+      res = CleaverCUDA::GetCellCenterValueCUDA(
           data_,scales,scale,arr[0],arr[1],arr[2],
           m,num_mats,find_max,&mat,w,h,d);
   }
@@ -358,7 +362,7 @@ float GetEdgeMatAndValueAtEndpoint(
 }
 
 __device__ __host__
-void GetEdgeVertices(
+void GetEdgeVerticesCUDA(
     CleaverCUDA::edge_index num,
     size_t i, size_t j, size_t k,
     float* scale, float verts[2][3]) {
@@ -439,10 +443,10 @@ void FindEdgeCutCUDA(
   edge->isCut_eval |= CleaverCUDA::kIsEvaluated;
   //get strongest material at each end of the edge
   char matA, matB, dummy;
-  float v1 = CleaverCUDA::GetEdgeMatAndValueAtEndpoint(
+  float v1 = CleaverCUDA::GetEdgeMatAndValueAtEndpointCUDA(
       data_,scales,scale,num,true,true,
       0,m,&matA,i,j,k,w,h,d);
-  float v2 = CleaverCUDA::GetEdgeMatAndValueAtEndpoint(
+  float v2 = CleaverCUDA::GetEdgeMatAndValueAtEndpointCUDA(
       data_,scales,scale,num,false,true,
       0,m,&matB,i,j,k,w,h,d);
   //if they are the same, nothing to be done: no cut
@@ -450,10 +454,10 @@ void FindEdgeCutCUDA(
   //if they are different, interpolate transition point.
   float a1 = v1;
   float b2 = v2;
-  float a2 = CleaverCUDA::GetEdgeMatAndValueAtEndpoint(
+  float a2 = CleaverCUDA::GetEdgeMatAndValueAtEndpointCUDA(
       data_,scales,scale,num,false,false,
       matA,m,&dummy,i,j,k,w,h,d);
-  float b1 = CleaverCUDA::GetEdgeMatAndValueAtEndpoint(
+  float b1 = CleaverCUDA::GetEdgeMatAndValueAtEndpointCUDA(
       data_,scales,scale,num,true,false,
       matB,m,&dummy,i,j,k,w,h,d);
   float top = (a1 - b1);
@@ -465,7 +469,7 @@ void FindEdgeCutCUDA(
       CleaverCUDA::kMaxMaterials) << CleaverCUDA::kMaterial);
   float t = min(max(top/bot,0.f),1.f);
   float edge_verts[2][3];
-  CleaverCUDA::GetEdgeVertices(num,i,j,k,scale,edge_verts);
+  CleaverCUDA::GetEdgeVerticesCUDA(num,i,j,k,scale,edge_verts);
   for (size_t x = 0; x < 3; x++)
     edge->cut_loc[x] = (1. - t) * edge_verts[0][x] + t * edge_verts[1][x];
 }
@@ -503,20 +507,26 @@ void FindEdgeCutsCUDA(
   float* scales = (float*)device_scales;
   float* scale = (float*)device_scale;
   Edge* edges = (Edge*)output_device_memory;
+  size_t grid_max = gridDim.x * gridDim.y * gridDim.z;
 
   size_t idx =
       blockIdx.x       +
       blockIdx.y * gridDim.x  +
       blockIdx.z * gridDim.x * gridDim.y  +
-      threadIdx.x  * gridDim.x * gridDim.y * gridDim.z  +
-      threadIdx.y  * gridDim.x * gridDim.y * gridDim.z * blockDim.x +
-      threadIdx.z  * gridDim.x * gridDim.y * gridDim.z * blockDim.x * blockDim.y;
-
-  size_t x = idx % kBlockSize;
-  size_t y = ((idx - x) / kBlockSize) % kBlockSize;
-  size_t z = (idx - x - y * kBlockSize) / kBlockSize / kBlockSize;
+      threadIdx.x  * grid_max  +
+      threadIdx.y  * grid_max * blockDim.x +
+      threadIdx.z  * grid_max * blockDim.x * blockDim.y;
 
   size_t num_edges = (which=='i')?8:3;
+
+  size_t e = idx % num_edges;
+  idx -= e; idx /= num_edges;
+  size_t x = idx % kChunkSize;
+  idx -= x; idx /= kChunkSize;
+  size_t y = idx % kChunkSize;
+  idx -= y; idx /= kChunkSize;
+  size_t z = idx % kChunkSize;
+
   CleaverCUDA::edge_index edge_nums[8] =
   {DULF, DULB, DURF, DURB, DLLF, DLLB, DLRF, DLRB};
   if (which=='d') {
@@ -531,20 +541,21 @@ void FindEdgeCutsCUDA(
   //    for (size_t x = 0; x < kBlockSize; x++ )
   //      for (size_t y = 0; y < kBlockSize; y++ )
   //        for (size_t z = 0; z < kBlockSize; z++ ) {
-  for (size_t e = 0; e < num_edges; e++) {
+//  for (size_t e = 0; e < num_edges; e++) {
     CleaverCUDA::edge_index edge_num = edge_nums[e];
     Edge *edge = &edges[(
         x +
-        y * kBlockSize +
-        z * kBlockSize * kBlockSize) * num_edges + e];
+        y * kChunkSize +
+        z * kChunkSize * kChunkSize) * num_edges + e];
     //first clear the data
     edge->isCut_eval = 0;
     edge->cut_loc[0] = edge->cut_loc[1] = edge->cut_loc[2] = 0.0;
-    if ((x < endi - i) && (y < endj - j) && (z < endk - k)) {
+    if ((x < endi - i) && (y < endj - j) &&
+        (z < endk - k) && (e < num_edges)) {
       FindEdgeCutCUDA(data_,scales,scale,w,h,d,m,
                       i+x,j+y,k+z,edge,edge_num);
     }
-  }
+//  }
   //        }
 }
 
@@ -556,7 +567,7 @@ void CallCUDAMaxes(float *all_data,
                    size_t wl, size_t hl, size_t dl,
                    void* device_pointers[3]) {
   //The chunk size will always be static
-  size_t chunk_size = kBlockSize;
+  size_t chunk_size = kChunkSize;
   //declare and allocate device memory for NRRD input data.
   size_t input_memory_size = w * h * d * (m - 1);
   void *input_device_memory = NULL;
@@ -588,7 +599,8 @@ void CallCUDAMaxes(float *all_data,
                              sizeof(float) * 3,
                              cudaMemcpyHostToDevice));
   //set up blocks and grid
-  dim3 dimBlock(kGPUSize, kGPUSize, kGPUSize);
+  dim3 dimBlock(kThreadSize, kThreadSize, kThreadSize);
+  dim3 dimGrid(kBlockSize, kBlockSize, kBlockSize);
   //for each block
   for (size_t i = 0;; i+=chunk_size) {
     size_t endi = i + chunk_size;
@@ -609,7 +621,7 @@ void CallCUDAMaxes(float *all_data,
           endk = dl;
         if (endk - 1 == k) break;
         //call the kernel
-        FindMaxesCUDA<<<dimBlock,dimBlock>>>(
+        FindMaxesCUDA<<<dimGrid,dimBlock>>>(
             input_device_memory, w, h, d, m,
             output_device_memory, i, j, k, endi, endj, endk,
             device_scales, device_scale);
@@ -650,7 +662,7 @@ size_t CallCUDACuts(void* data,
                     CleaverCUDA::Edge* axis_edges,
                     bool* cut_cells) {
   //The chunk size will always be static
-  size_t chunk = kBlockSize;
+  size_t chunk = kChunkSize;
   //declare and allocate output memory
   size_t output_memory_size = (chunk + 1) * (chunk + 1) * (chunk + 1) * 8;
   void *output_device_memory = NULL;
@@ -660,7 +672,9 @@ size_t CallCUDACuts(void* data,
   //the number of cuts found
   size_t count = 0, max_cell = wl*hl*dl;
   //set up blocks and grid
-  dim3 dimBlock(kGPUSize, kGPUSize, kGPUSize);
+  dim3 dimBlock(kThreadSize, kThreadSize,kThreadSize);
+  dim3 dimGrid8(kBlockSize*2, kBlockSize*2,kBlockSize*2);
+  dim3 dimGrid3(kBlockSize*3, kBlockSize,kBlockSize);
   CleaverCUDA::Edge *inner_edges_output =
       new CleaverCUDA::Edge[output_memory_size];
   CleaverCUDA::Edge *dual_edges_output =
@@ -701,7 +715,7 @@ size_t CallCUDACuts(void* data,
           endk = dl;
         if (endk - 1 == k) break;
         //call the inner edge kernel
-        FindEdgeCutsCUDA<<<dimBlock,dimBlock>>>(
+        FindEdgeCutsCUDA<<<dimGrid8,dimBlock>>>(
             data,
             scales,
             scale,
@@ -723,7 +737,7 @@ size_t CallCUDACuts(void* data,
                                    output_memory_size ,
                                    cudaMemcpyDeviceToHost));
         //call the dual edge kernel
-        FindEdgeCutsCUDA<<<dimBlock,dimBlock>>>(
+        FindEdgeCutsCUDA<<<dimGrid3,dimBlock>>>(
             data,
             scales,
             scale,
@@ -745,7 +759,7 @@ size_t CallCUDACuts(void* data,
                                    output_memory_size ,
                                    cudaMemcpyDeviceToHost));
         //call the axis edge kernel
-        FindEdgeCutsCUDA<<<dimBlock,dimBlock>>>(
+        FindEdgeCutsCUDA<<<dimGrid3,dimBlock>>>(
             data,
             scales,
             scale,

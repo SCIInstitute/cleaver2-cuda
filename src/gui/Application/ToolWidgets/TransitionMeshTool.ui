@@ -264,15 +264,32 @@
       </item>
      </layout>
     </item>
-    <item alignment="Qt::AlignHCenter">
-     <widget class="QCheckBox" name="useGPU">
-      <property name="text">
-       <string>Use GPU</string>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_7">
+      <property name="topMargin">
+       <number>5</number>
       </property>
-      <property name="checked">
-       <bool>true</bool>
-      </property>
-     </widget>
+      <item>
+       <widget class="QCheckBox" name="addAir">
+        <property name="text">
+         <string>Add &quot;Air&quot;</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="useGPU">
+        <property name="text">
+         <string>Use GPU</string>
+        </property>
+        <property name="checked">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </item>
     <item alignment="Qt::AlignHCenter">
      <widget class="QToolButton" name="createMeshButton">

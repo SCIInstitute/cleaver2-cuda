@@ -38,10 +38,12 @@ static const char kMaterial = 4;
 static const char kMaxMaterials = 16;
 
 
-/** The constant size of a CUDA dimension */
-static const size_t kGPUSize = 8;
-/** The constant size of a block edge */
-static const size_t kBlockSize = kGPUSize * kGPUSize;
+/** The constant size of a CUDA thread edge */
+static const size_t kThreadSize = 8;
+/** The constant size of a CUDA block edge */
+static const size_t kBlockSize = 16;
+/** The constant size of a lattice chunk edge */
+static const size_t kChunkSize = kThreadSize*kBlockSize;
 
 /**
  * The Kernel call for finding the dominant materials.
@@ -105,7 +107,7 @@ size_t CallCUDACuts(void* data,
  * @param k The z location in the block.
  * @param cell The array of the location of the relevant adjacent edge.
  */
-void GetAdjacentCellFromEdge(
+void GetAdjacentCellFromEdgeCUDA(
     CleaverCUDA::edge_index num, bool first,
     size_t i, size_t j, size_t k, size_t* cell);
 
@@ -126,7 +128,7 @@ void GetAdjacentCellFromEdge(
  * @param d The input data depth.
  * @return Returns the center vertex value.
  */
-float GetCellCenterValue(
+float GetCellCenterValueCUDA(
     float* data_, float* scales, float* scale,
     size_t i, size_t j, size_t k,
     size_t m, size_t num_mats,
@@ -148,7 +150,7 @@ float GetCellCenterValue(
  * @param dd_ The input data depth.
  *
  */
-float CUDADataTransform(float *data_,
+float DataTransformCUDA(float *data_,
                         float i, float j, float k,
                         size_t mm, size_t m, float* scales,
                         float* scale,
@@ -174,7 +176,7 @@ float CUDADataTransform(float *data_,
  * @param d The input data depth.
  * @return Returns the edge's vertex material value.
  */
-float GetEdgeMatAndValueAtEndpoint(
+float GetEdgeMatAndValueAtEndpointCUDA(
     float* data_, float* scales, float* scale,
     CleaverCUDA::edge_index num, bool first, bool find_max,
     size_t m, size_t num_mats, char* ret_mat,
@@ -195,7 +197,7 @@ float GetEdgeMatAndValueAtEndpoint(
  * @param d The input data depth.
  * @return The number of the material of highest value at this location.
  */
-char GetLabel(float* data_, float* scales, float* scale,
+char GetLabelCUDA(float* data_, float* scales, float* scale,
               size_t i, size_t j, size_t k, char num_mats,
               size_t w, size_t h, size_t d);
 
@@ -210,7 +212,7 @@ char GetLabel(float* data_, float* scales, float* scale,
  * @param verts The pointer to the location to store the vertices.
  *
  */
-void GetEdgeVertices(
+void GetEdgeVerticesCUDA(
     CleaverCUDA::edge_index num,
     size_t i, size_t j, size_t k,
     float* scale, float verts[2][3]);
@@ -245,7 +247,7 @@ void FindEdgeCutCUDA(
  * @param j The second value of the array to set.
  * @param k The third value of the array to set.
  */
-void SetArray(size_t *cell, size_t i, size_t j, size_t k);
+void SetArrayCUDA(size_t *cell, size_t i, size_t j, size_t k);
 
 }
 #endif /* CLEAVER_CUDA_H_ */

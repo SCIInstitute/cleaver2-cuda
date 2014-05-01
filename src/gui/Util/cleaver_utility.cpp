@@ -34,7 +34,8 @@ CleaverUtility::CleaverUtility()
   m_(0),
   labels_(nullptr),
   cut_cells_(nullptr),
-  use_GPU_(true) {
+  use_GPU_(true),
+  addAir_(false) {
   device_pointers_[0] = device_pointers_[1] = device_pointers_[2] = NULL;
   scale_[0] = scale_[1] = scale_[2] = 1.;
   scalesP_ = nullptr;
@@ -64,10 +65,15 @@ void CleaverUtility::ParseInput(int argc, char *argv[])
     if(token.compare("-h") == 0)
       PrintHelp();
     //------------------------
-    //  Parse Help Flag
+    //  Parse GPU Flag
     //------------------------
     else if(token.compare("--force-CPU") == 0)
       use_GPU_ = false;
+    //------------------------
+    //  Parse Air Flag
+    //------------------------
+    else if(token.compare("--add-air") == 0)
+      addAir_ = true;
     //------------------------
     //  Parse Silent Flag
     //------------------------
@@ -174,6 +180,7 @@ void CleaverUtility::PrintUsage()
   std::cerr << "   -ra  x y z             absolute resolution" << std::endl;
   std::cerr << "   -rs  x y z             scaled resolution" << std::endl;
   std::cerr << "   --force-CPU            forces CPU only" << std::endl;
+  std::cerr << "   --add-air              Adds \"Air\" Material" << std::endl;
 
   std::cerr << std::endl;
 
@@ -406,6 +413,40 @@ bool CleaverUtility::LoadNRRDs() {
     std::array<float,3> scale = {{ xs, ys, zs }};
     scales_.push_back(scale);
   }
+
+  if (addAir_ || inputs_.size() == 1) {
+    std::cerr << "Attempting transition mesh with 1 material..."
+        << std::endl;
+    inputs_.resize(inputs_.size()+1);
+    m_ += 1;
+    scales_.resize(scales_.size()+1);
+    scales_[scales_.size()-1] = scales_[0];
+    float* data2 = new float[total_cells*m_];
+    for(size_t k=0; k < d_; k++){
+      for(size_t j=0; j < h_; j++){
+        for(size_t i=0; i < w_; i++){
+          for(size_t h=0; h < m_; h++){
+            size_t base = i + j*w_ + k*w_*h_;
+            size_t base2 = base + h*total_cells;
+            if (h < m_ - 1)
+              data2[base2] = data_[base2];
+            else {
+              float mx = data_[base];
+              for(size_t t = 1; t < m_ - 1; t++)
+                mx = std::max(mx,data_[base + t*total_cells]);
+              data2[base2] = -mx;
+            }
+          }
+        }
+      }
+    }
+    delete[] data_;
+    data_ = data2;
+  }
+
+
+
+
   delete[] scalesP_;
   scalesP_ = new float[scales_.size()*3];
   for (size_t u = 0; u < scales_.size(); u++)
@@ -488,14 +529,14 @@ void CleaverUtility::FindMaxes() {
     for (size_t j = 0; j < h_; j++)
       for (size_t k = 0; k < d_; k++) {
         int max = 0;
-        float max_val = CleaverCUDA::CUDADataTransform(
+        float max_val = CleaverCUDA::DataTransformCUDA(
             data_,static_cast<float>(i),
             static_cast<float>(j),
             static_cast<float>(k),
             0,m_,scalesP_,scale_,ww_,hh_,dd_);
         for (size_t l = 1; l < m_; l++) {
           float tmp;
-          if ((tmp = CleaverCUDA::CUDADataTransform(
+          if ((tmp = CleaverCUDA::DataTransformCUDA(
               data_,static_cast<float>(i),
               static_cast<float>(j),
               static_cast<float>(k),
@@ -545,9 +586,6 @@ void CleaverUtility::FindCutCells() {
     duration << " sec." << std::endl;
 }
 
-
-
-
 size_t CleaverUtility::w() { return w_; }
 
 size_t CleaverUtility::h() { return h_; }
@@ -572,15 +610,15 @@ void CleaverUtility::CalculateCuts(SimpleGeometry&  geos) {
                                   geos.GetEdgePointers()[1],
                                   geos.GetEdgePointers()[2],
                                   cut_cells_);
-//            CleaverCUDA::CallCUDACuts(data_,
-//                                      scalesP_,
-//                                      scale_,
-//                                      ww_,hh_,dd_,m_,
-//                                      w_,h_,d_,
-//                                      geos.GetEdgePointers()[0],
-//                                      geos.GetEdgePointers()[1],
-//                                      geos.GetEdgePointers()[2],
-//                                      cut_cells_);
+    //            CleaverCUDA::CallCUDACuts(data_,
+    //                                      scalesP_,
+    //                                      scale_,
+    //                                      ww_,hh_,dd_,m_,
+    //                                      w_,h_,d_,
+    //                                      geos.GetEdgePointers()[0],
+    //                                      geos.GetEdgePointers()[1],
+    //                                      geos.GetEdgePointers()[2],
+    //                                      cut_cells_);
     //    for (size_t tt = 0; tt < 3; tt++)
     //      for (size_t t = 0; t < geos.GetEdgePointersSize()[tt]; t++)
     //        if((geos.GetEdgePointers()[tt][t].isCut_eval & CleaverCUDA::kIsCut))
@@ -809,7 +847,7 @@ CleaverUtility::GetVertsFacesFromNRRD(std::vector<std::string> &files,
                                       float scales[3],
                                       std::array<size_t,3> &res,
                                       bool useScale, bool useAbs,
-                                      bool useGPU) {
+                                      bool useGPU, bool addAir) {
   inputs_.clear();
   for(auto a : files) inputs_.push_back(a);
   for(size_t x = 0; x < 3; x++) {
@@ -819,6 +857,7 @@ CleaverUtility::GetVertsFacesFromNRRD(std::vector<std::string> &files,
       res_[x] = res[x];
   }
   this->use_GPU_ = useGPU;
+  this->addAir_ = addAir;
   /***************************CPU*****************************/
   //  Load Data
   if(!LoadNRRDs()) {
@@ -860,7 +899,7 @@ void CleaverUtility::GetVertsFacesFromNRRD(int argc, char *argv[]) {
   for(auto a : inputs_) ins.push_back(a);
   GetVertsFacesFromNRRD(ins,scale_,res_,
                         scaled_resolution_,absolute_resolution_,
-                        use_GPU_ );
+                        use_GPU_,addAir_);
 }
 
 void CleaverUtility::AccumulateVertsAndFaces(
