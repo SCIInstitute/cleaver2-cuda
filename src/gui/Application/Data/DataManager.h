@@ -25,6 +25,7 @@ class DataManager : public QObject
   void addTansitionMesh(std::vector<std::array<float,3>> &verts,
                         std::vector<std::array<size_t,4>> &faces,
                         std::array<size_t,3> dims);
+  void outputTansitionMesh(std::string name);
   void removeVolume(Cleaver::Volume *volume);
 
   std::vector<ulong> getSelection();
@@ -69,6 +70,7 @@ class DataManager : public QObject
   std::vector<Cleaver::AbstractScalarField*>  m_fields;
   std::vector<std::array<float,3>>            verts_;
   std::vector<std::array<size_t,4>>           faces_;
+  std::array<size_t, 3>                       dims_;
 };
 
 #endif // DATAMANAGER_H

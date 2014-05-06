@@ -20,6 +20,8 @@ public slots:
 
     void loadVolumeData();
     void createTransitionMesh();
+    void loadMesh();
+    void outputMesh();
     
 private:
     Ui::TransitionMeshTool *ui;

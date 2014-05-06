@@ -57,3 +57,40 @@ void TransitionMeshTool::createTransitionMesh()
       output.first,output.second,{{program.w(),program.h(),program.d()}});
   MainWindow::instance()->createWindow(output.first, output.second);
 }
+
+void TransitionMeshTool::loadMesh() {
+  QString fileName =
+      QFileDialog::getOpenFileName(this, tr("Import Cleaver Mesh"),
+                                    QDir::currentPath(),
+                                    tr("CMF (*.cmf)"));
+  clock_t start = clock();
+  std::ifstream in(fileName.toStdString());
+  size_t num_verts, num_faces, w, h, d;
+  in >> w >> h >> d;
+  std::vector<std::array<float,3>> verts;
+  std::vector<std::array<size_t,4>> faces;
+  in >> num_verts >> num_faces;
+  for(size_t i = 0; i < num_verts; i++){
+    std::array<float,3> tmp;
+    in >> tmp[0] >> tmp[1] >> tmp[2];
+    verts.push_back(tmp);
+  }
+  for(size_t i = 0; i < num_faces; i++){
+    std::array<size_t,4> tmp;
+    in >> tmp[0] >> tmp[1] >> tmp[2] >> tmp[3];
+    faces.push_back(tmp);
+  }
+  in.close();
+  double duration = ((double)clock() - (double)start) /
+      (double)CLOCKS_PER_SEC;
+    std::cout << "Read mesh file: " << fileName.toStdString() <<
+    "\t" << duration << " sec." << std::endl;
+  MainWindow::dataManager()->addTansitionMesh(verts,faces,{{w,h,d}});
+  MainWindow::instance()->createWindow(verts,faces);
+}
+
+void TransitionMeshTool::outputMesh() {
+  std::string name = ui->outputName->toPlainText().toStdString();
+  if(name.empty()) name = "output";
+  MainWindow::dataManager()->outputTansitionMesh(name);
+}

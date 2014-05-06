@@ -1,4 +1,6 @@
 #include "DataManager.h"
+#include <cstdio>
+#include <fstream>
 
 DataManager::DataManager()
 {
@@ -130,8 +132,32 @@ void DataManager::addTansitionMesh(
   clearFields();
   Cleaver::FloatField ff(nullptr,dims[0],dims[1],dims[2]);
   addField(&ff);
+  dims_ = dims;
   for (auto a : verts) verts_.push_back(a);
   for (auto a : faces) faces_.push_back(a);
+}
+
+
+void DataManager::outputTansitionMesh(std::string name) {
+  clock_t start = clock();
+  std::ofstream out(name + ".cmf");
+  out << dims_[0] << " " << dims_[1] << " " << dims_[2] << std::endl;
+  out << verts_.size() << std::endl;
+  out << faces_.size() << std::endl;
+  for(size_t t = 0; t < verts_.size(); t++)
+    out << verts_.at(t)[0] << " " <<
+    verts_.at(t)[1] << " " <<
+    verts_.at(t)[2] << std::endl;
+  for(size_t t = 0; t < faces_.size(); t++)
+    out << faces_.at(t)[0] << " " <<
+    faces_.at(t)[1] << " " <<
+    faces_.at(t)[2] << " " <<
+    faces_.at(t)[3] << std::endl;
+  out.close();
+  double duration = ((double)clock() - (double)start) /
+      (double)CLOCKS_PER_SEC;
+    std::cout << "Wrote mesh to file: " << name << ".cmf\t" <<
+    duration << " sec." << std::endl;
 }
 
 void DataManager::removeVolume(Cleaver::Volume *volume)

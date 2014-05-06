@@ -862,7 +862,7 @@ CleaverUtility::GetVertsFacesFromNRRD(std::vector<std::string> &files,
   //  Load Data
   if(!LoadNRRDs()) {
     std::cerr << "Error reading data or allocating memory!" << std::endl;
-    exit(1);
+    return false;
   }
   // Find all of the max materials
   FindMaxes();
@@ -876,7 +876,7 @@ CleaverUtility::GetVertsFacesFromNRRD(std::vector<std::string> &files,
   SimpleGeometry geos(w,h,d,verbose());
   if(!geos.Valid()) {
     std::cerr << "Error allocating geometric memory!" << std::endl;
-    exit(1);
+    return false;
   }
   //geos.TestCells();
   //  Calculate the cuts

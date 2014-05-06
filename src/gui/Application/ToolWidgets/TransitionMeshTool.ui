@@ -7,19 +7,19 @@
     <x>0</x>
     <y>0</y>
     <width>210</width>
-    <height>200</height>
+    <height>275</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>210</width>
-    <height>200</height>
+    <height>275</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>210</width>
-    <height>200</height>
+    <height>275</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -38,7 +38,7 @@
       <property name="minimumSize">
        <size>
         <width>171</width>
-        <height>0</height>
+        <height>25</height>
        </size>
       </property>
       <property name="maximumSize">
@@ -49,6 +49,25 @@
       </property>
       <property name="text">
        <string>Load Volume Data</string>
+      </property>
+     </widget>
+    </item>
+    <item alignment="Qt::AlignHCenter">
+     <widget class="QPushButton" name="loadMesh">
+      <property name="minimumSize">
+       <size>
+        <width>171</width>
+        <height>25</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>9999</width>
+        <height>9999</height>
+       </size>
+      </property>
+      <property name="text">
+       <string>Load Cleaver Mesh</string>
       </property>
      </widget>
     </item>
@@ -296,7 +315,7 @@
       <property name="minimumSize">
        <size>
         <width>171</width>
-        <height>0</height>
+        <height>25</height>
        </size>
       </property>
       <property name="maximumSize">
@@ -307,6 +326,49 @@
       </property>
       <property name="text">
        <string>Create Transition Mesh</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_6">
+      <property name="topMargin">
+       <number>0</number>
+      </property>
+      <item>
+       <widget class="QTextEdit" name="outputName">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>25</height>
+         </size>
+        </property>
+        <property name="verticalScrollBarPolicy">
+         <enum>Qt::ScrollBarAlwaysOff</enum>
+        </property>
+        <property name="horizontalScrollBarPolicy">
+         <enum>Qt::ScrollBarAlwaysOff</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="label_11">
+        <property name="text">
+         <string>Output Name</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QPushButton" name="outputMesh">
+      <property name="minimumSize">
+       <size>
+        <width>0</width>
+        <height>25</height>
+       </size>
+      </property>
+      <property name="text">
+       <string>Output Cleaver Mesh</string>
       </property>
      </widget>
     </item>
@@ -322,8 +384,8 @@
    <slot>loadVolumeData()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>105</x>
-     <y>77</y>
+     <x>120</x>
+     <y>50</y>
     </hint>
     <hint type="destinationlabel">
      <x>104</x>
@@ -338,8 +400,8 @@
    <slot>createTransitionMesh()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>105</x>
-     <y>58</y>
+     <x>120</x>
+     <y>226</y>
     </hint>
     <hint type="destinationlabel">
      <x>104</x>
@@ -347,9 +409,43 @@
     </hint>
    </hints>
   </connection>
+  <connection>
+   <sender>outputMesh</sender>
+   <signal>clicked()</signal>
+   <receiver>TransitionMeshTool</receiver>
+   <slot>outputMesh()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>183</x>
+     <y>261</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>182</x>
+     <y>296</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>loadMesh</sender>
+   <signal>clicked()</signal>
+   <receiver>TransitionMeshTool</receiver>
+   <slot>loadMesh()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>171</x>
+     <y>60</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>208</x>
+     <y>60</y>
+    </hint>
+   </hints>
+  </connection>
  </connections>
  <slots>
   <slot>loadVolumeData()</slot>
   <slot>createTransitionMesh()</slot>
+  <slot>loadMesh()</slot>
+  <slot>outputMesh()</slot>
  </slots>
 </ui>

@@ -1,3 +1,4 @@
+*.cmf
 .cpro*
 .pro*
 lib
