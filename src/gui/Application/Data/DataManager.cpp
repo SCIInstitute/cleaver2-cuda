@@ -140,24 +140,28 @@ void DataManager::addTansitionMesh(
 
 void DataManager::outputTansitionMesh(std::string name) {
   clock_t start = clock();
-  std::ofstream out(name + ".cmf");
-  out << dims_[0] << " " << dims_[1] << " " << dims_[2] << std::endl;
-  out << verts_.size() << std::endl;
-  out << faces_.size() << std::endl;
-  for(size_t t = 0; t < verts_.size(); t++)
-    out << verts_.at(t)[0] << " " <<
-    verts_.at(t)[1] << " " <<
-    verts_.at(t)[2] << std::endl;
-  for(size_t t = 0; t < faces_.size(); t++)
-    out << faces_.at(t)[0] << " " <<
-    faces_.at(t)[1] << " " <<
-    faces_.at(t)[2] << " " <<
-    faces_.at(t)[3] << std::endl;
+  std::ofstream out(name + ".cmf", std::ios::binary);
+  binary_write(out,dims_[0]);
+  binary_write(out,dims_[1]);
+  binary_write(out,dims_[2]);
+  binary_write(out,verts_.size());
+  binary_write(out,faces_.size());
+  for(size_t t = 0; t < verts_.size(); t++) {
+    binary_write(out,verts_.at(t)[0]);
+    binary_write(out,verts_.at(t)[1]);
+    binary_write(out,verts_.at(t)[2]);
+  }
+  for(size_t t = 0; t < faces_.size(); t++) {
+    binary_write(out,faces_.at(t)[0]);
+    binary_write(out,faces_.at(t)[1]);
+    binary_write(out,faces_.at(t)[2]);
+    binary_write(out,faces_.at(t)[3]);
+  }
   out.close();
   double duration = ((double)clock() - (double)start) /
       (double)CLOCKS_PER_SEC;
-    std::cout << "Wrote mesh to file: " << name << ".cmf\t" <<
-    duration << " sec." << std::endl;
+  std::cout << "Wrote mesh to file: " << name << ".cmf\t" <<
+      duration << " sec." << std::endl;
 }
 
 void DataManager::removeVolume(Cleaver::Volume *volume)

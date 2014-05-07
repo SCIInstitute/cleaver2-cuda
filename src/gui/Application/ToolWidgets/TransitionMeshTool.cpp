@@ -2,12 +2,8 @@
 #include "ui_TransitionMeshTool.h"
 #include "MainWindow.h"
 #include "cleaver_utility.h"
-#include <iostream>
-#include <sstream>
-#include <fstream>
 #include <vector>
 #include <array>
-#include <cmath>
 
 TransitionMeshTool::TransitionMeshTool(QWidget *parent) :
 QDockWidget(parent),
@@ -64,20 +60,28 @@ void TransitionMeshTool::loadMesh() {
                                     QDir::currentPath(),
                                     tr("CMF (*.cmf)"));
   clock_t start = clock();
-  std::ifstream in(fileName.toStdString());
+  std::ifstream in(fileName.toStdString(),  std::ios::binary);
   size_t num_verts, num_faces, w, h, d;
-  in >> w >> h >> d;
+  binary_read(in,w);
+  binary_read(in,h);
+  binary_read(in,d);
   std::vector<std::array<float,3>> verts;
   std::vector<std::array<size_t,4>> faces;
-  in >> num_verts >> num_faces;
+  binary_read(in,num_verts);
+  binary_read(in,num_faces);
   for(size_t i = 0; i < num_verts; i++){
     std::array<float,3> tmp;
-    in >> tmp[0] >> tmp[1] >> tmp[2];
+    binary_read(in,tmp[0]);
+    binary_read(in,tmp[1]);
+    binary_read(in,tmp[2]);
     verts.push_back(tmp);
   }
   for(size_t i = 0; i < num_faces; i++){
     std::array<size_t,4> tmp;
-    in >> tmp[0] >> tmp[1] >> tmp[2] >> tmp[3];
+    binary_read(in,tmp[0]);
+    binary_read(in,tmp[1]);
+    binary_read(in,tmp[2]);
+    binary_read(in,tmp[3]);
     faces.push_back(tmp);
   }
   in.close();

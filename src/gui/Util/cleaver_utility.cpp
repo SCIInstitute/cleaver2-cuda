@@ -862,35 +862,33 @@ CleaverUtility::GetVertsFacesFromNRRD(std::vector<std::string> &files,
   //  Load Data
   if(!LoadNRRDs()) {
     std::cerr << "Error reading data or allocating memory!" << std::endl;
-    return false;
+  } else {
+    // Find all of the max materials
+    FindMaxes();
+    //  Find all of the cut cells
+    FindCutCells();
+    //allocate memory for the geometry.
+    size_t w,h,d;
+    w = this->w();
+    h = this->h();
+    d = this->d();
+    SimpleGeometry geos(w,h,d,verbose());
+    if(!geos.Valid()) {
+      std::cerr << "Error allocating geometric memory!" << std::endl;
+    } else {
+      //geos.TestCells();
+      //  Calculate the cuts
+      CalculateCuts(geos);
+      //  Calculate the triples
+      CalculateTriples(geos);
+      //  Calculate the quadruples
+      CalculateQuadruples(geos);
+      //  Stencil Faces
+      StencilFaces(geos);
+    }
   }
-  // Find all of the max materials
-  FindMaxes();
-  //  Find all of the cut cells
-  FindCutCells();
-  //allocate memory for the geometry.
-  size_t w,h,d;
-  w = this->w();
-  h = this->h();
-  d = this->d();
-  SimpleGeometry geos(w,h,d,verbose());
-  if(!geos.Valid()) {
-    std::cerr << "Error allocating geometric memory!" << std::endl;
-    return false;
-  }
-  //geos.TestCells();
-  //  Calculate the cuts
-  CalculateCuts(geos);
-  //  Calculate the triples
-  CalculateTriples(geos);
-  //  Calculate the quadruples
-  CalculateQuadruples(geos);
-  //  Stencil Faces
-  StencilFaces(geos);
   return std::pair<std::vector<std::array<float,3>>,
       std::vector<std::array<size_t,4>>>(verts_,faces_);
-  /***************************GPU*****************************/
-  // TODO
 }
 
 void CleaverUtility::GetVertsFacesFromNRRD(int argc, char *argv[]) {

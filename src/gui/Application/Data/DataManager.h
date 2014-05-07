@@ -7,6 +7,11 @@
 #include <stdlib.h>
 #include <array>
 
+template<typename T>
+std::ostream& binary_write(std::ostream& stream, const T& value){
+    return stream.write(reinterpret_cast<const char*>(&value), sizeof(T));
+}
+
 class DataManager : public QObject
 {
   Q_OBJECT

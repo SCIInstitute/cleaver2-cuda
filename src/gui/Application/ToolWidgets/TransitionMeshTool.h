@@ -2,8 +2,14 @@
 #define TRANSITIONMESHTOOL_H
 
 #include <QDockWidget>
+#include <iostream>
+#include <fstream>
 #include <Cleaver/Cleaver.h>
 
+template<typename T>
+std::istream & binary_read(std::istream& stream, T& value){
+    return stream.read(reinterpret_cast<char*>(&value), sizeof(T));
+}
 namespace Ui {
 class TransitionMeshTool;
 }
