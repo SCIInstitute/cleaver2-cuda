@@ -125,7 +125,6 @@ void MeshWindow::initializeShaders()
   const char *vertex_shader_source = (const char *)default_vert;
   const char *fragment_shader_source = (const char *)default_frag;
 
-
   // Create Shader And Program Objects
   program = glCreateProgram();
   vertex_shader = glCreateShader(GL_VERTEX_SHADER_ARB);
