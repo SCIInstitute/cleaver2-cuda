@@ -56,40 +56,66 @@ void TransitionMeshTool::createTransitionMesh()
 
 void TransitionMeshTool::loadMesh() {
   QString fileName =
-      QFileDialog::getOpenFileName(this, tr("Import Cleaver Mesh"),
-                                    QDir::currentPath(),
-                                    tr("CMF (*.cmf)"));
+      QFileDialog::getOpenFileName(this, tr("Import Polygon Mesh"),
+                                   QDir::currentPath(),
+                                   tr("PLY (*.ply)"));
   clock_t start = clock();
-  std::ifstream in(fileName.toStdString(),  std::ios::binary);
-  size_t num_verts, num_faces, w, h, d;
-  binary_read(in,w);
-  binary_read(in,h);
-  binary_read(in,d);
+  std::ifstream in(fileName.toStdString());
+  std::string tmp;
+  size_t num_verts=0, num_faces=0, width=0, height=0, depth=0;
+  unsigned long n_verts=0, n_faces=0, w=0, h=0, d=0;
+  getline(in,tmp);
+  getline(in,tmp);
+  getline(in,tmp);
+  sscanf(tmp.c_str(),"comment %lu %lu %lu",
+         &w, &h, &d);
+  width = static_cast<size_t>(w);
+  height = static_cast<size_t>(h);
+  depth = static_cast<size_t>(d);
+  getline(in,tmp);
+  sscanf(tmp.c_str(),"element vertex %lu",&n_verts);
+  getline(in,tmp);
+  getline(in,tmp);
+  getline(in,tmp);
+  getline(in,tmp);
+  sscanf(tmp.c_str(),"element face %lu",&n_faces);
+  getline(in,tmp);
+  getline(in,tmp);
+  getline(in,tmp);
+  getline(in,tmp);
+  num_verts = static_cast<size_t>(n_verts);
+  num_faces = static_cast<size_t>(n_faces);
   std::vector<std::array<float,3>> verts;
   std::vector<std::array<size_t,4>> faces;
-  binary_read(in,num_verts);
-  binary_read(in,num_faces);
   for(size_t i = 0; i < num_verts; i++){
-    std::array<float,3> tmp;
-    binary_read(in,tmp[0]);
-    binary_read(in,tmp[1]);
-    binary_read(in,tmp[2]);
-    verts.push_back(tmp);
+    getline(in,tmp);
+    std::array<float,3> v;
+    sscanf(tmp.c_str(),"%g %g %g",&v[0],&v[1],&v[2]);
+    verts.push_back(v);
+  }
+  size_t dum;
+  for(size_t i = 0; i < num_faces; i++){
+    getline(in,tmp);
+    std::array<size_t,4> f;
+    std::array<unsigned long,4> ff;
+    sscanf(tmp.c_str(),"%lu %lu %lu %lu",&dum,&ff[0],&ff[1],&ff[2]);
+
+    for(size_t j = 0; j < 3; j++) f[j] = static_cast<size_t>(ff[j]);
+    faces.push_back(f);
   }
   for(size_t i = 0; i < num_faces; i++){
-    std::array<size_t,4> tmp;
-    binary_read(in,tmp[0]);
-    binary_read(in,tmp[1]);
-    binary_read(in,tmp[2]);
-    binary_read(in,tmp[3]);
-    faces.push_back(tmp);
+    getline(in,tmp);
+    unsigned long nn = 0;
+    sscanf(tmp.c_str(),"%lu",&nn);
+    faces.at(i)[3] = static_cast<size_t>(nn);
   }
   in.close();
   double duration = ((double)clock() - (double)start) /
       (double)CLOCKS_PER_SEC;
-    std::cout << "Read mesh file: " << fileName.toStdString() <<
-    "\t" << duration << " sec." << std::endl;
-  MainWindow::dataManager()->addTansitionMesh(verts,faces,{{w,h,d}});
+  std::cout << "Read mesh file: " << fileName.toStdString() <<
+      "\t" << duration << " sec." << std::endl;
+  MainWindow::dataManager()->addTansitionMesh(
+      verts,faces,{{width,height,depth}});
   MainWindow::instance()->createWindow(verts,faces);
 }
 

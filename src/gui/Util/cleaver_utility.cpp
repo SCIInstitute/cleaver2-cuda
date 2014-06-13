@@ -824,17 +824,22 @@ void CleaverUtility::OutputToFile() {
   std::ofstream file((output_ + ".ply"));
   file << "ply" << std::endl;
   file << "format ascii 1.0" << std::endl;
+  file << "comment " << w_ << " " << h_ << " " << d_ << std::endl;
   file << "element vertex " << verts_.size() << std::endl;
   file << "property float x " << std::endl;
   file << "property float y " << std::endl;
   file << "property float z " << std::endl;
   file << "element face " << faces_.size() << std::endl;
   file << "property list uchar int vertex_index" << std::endl;
+  file << "element color " << faces_.size() << std::endl;
+  file << "property list uchar int face_color" << std::endl;
   file << "end_header" << std::endl;
   for(auto a : verts_)
     file << a[0] << " " << a[1] << " " << a[2] << std::endl;
   for(auto a : faces_)
     file << "3 " << a[0] << " " << a[1] << " " << a[2] << std::endl;
+  for(auto a : faces_)
+    file << a[3] << std::endl;
   file.close();
   double duration = ((double)clock() - (double)start) / (double)CLOCKS_PER_SEC;
   if (verbose_)

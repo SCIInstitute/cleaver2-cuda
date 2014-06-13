@@ -140,28 +140,29 @@ void DataManager::addTansitionMesh(
 
 void DataManager::outputTansitionMesh(std::string name) {
   clock_t start = clock();
-  std::ofstream out(name + ".cmf", std::ios::binary);
-  binary_write(out,dims_[0]);
-  binary_write(out,dims_[1]);
-  binary_write(out,dims_[2]);
-  binary_write(out,verts_.size());
-  binary_write(out,faces_.size());
-  for(size_t t = 0; t < verts_.size(); t++) {
-    binary_write(out,verts_.at(t)[0]);
-    binary_write(out,verts_.at(t)[1]);
-    binary_write(out,verts_.at(t)[2]);
-  }
-  for(size_t t = 0; t < faces_.size(); t++) {
-    binary_write(out,faces_.at(t)[0]);
-    binary_write(out,faces_.at(t)[1]);
-    binary_write(out,faces_.at(t)[2]);
-    binary_write(out,faces_.at(t)[3]);
-  }
-  out.close();
-  double duration = ((double)clock() - (double)start) /
-      (double)CLOCKS_PER_SEC;
-  std::cout << "Wrote mesh to file: " << name << ".cmf\t" <<
-      duration << " sec." << std::endl;
+  std::ofstream file((name + ".ply"));
+  file << "ply" << std::endl;
+  file << "format ascii 1.0" << std::endl;
+  file << "comment " << dims_[0] << " " << dims_[1] << " " << dims_[2] << std::endl;
+  file << "element vertex " << verts_.size() << std::endl;
+  file << "property float x " << std::endl;
+  file << "property float y " << std::endl;
+  file << "property float z " << std::endl;
+  file << "element face " << faces_.size() << std::endl;
+  file << "property list uchar int vertex_index" << std::endl;
+  file << "element color " << faces_.size() << std::endl;
+  file << "property list uchar int face_color" << std::endl;
+  file << "end_header" << std::endl;
+  for(auto a : verts_)
+    file << a[0] << " " << a[1] << " " << a[2] << std::endl;
+  for(auto a : faces_)
+    file << "3 " << a[0] << " " << a[1] << " " << a[2] << std::endl;
+  for(auto a : faces_)
+    file << a[3] << std::endl;
+  file.close();
+  double duration = ((double)clock() - (double)start) / (double)CLOCKS_PER_SEC;
+    std::cout << "Wrote faces to file: " << name << ".ply\t" <<
+    duration << " sec." << std::endl;
 }
 
 void DataManager::removeVolume(Cleaver::Volume *volume)
