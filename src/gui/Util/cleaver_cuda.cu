@@ -442,13 +442,13 @@ void FindEdgeCutCUDA(
     Edge* edge, CleaverCUDA::edge_index num) {
   edge->isCut_eval |= CleaverCUDA::kIsEvaluated;
   //get strongest material at each end of the edge
-  char matA, matB, dummy;
+  unsigned char matA, matB, dummy;
   float v1 = CleaverCUDA::GetEdgeMatAndValueAtEndpointCUDA(
       data_,scales,scale,num,true,true,
-      0,m,&matA,i,j,k,w,h,d);
+      0,m,(char*)&matA,i,j,k,w,h,d);
   float v2 = CleaverCUDA::GetEdgeMatAndValueAtEndpointCUDA(
       data_,scales,scale,num,false,true,
-      0,m,&matB,i,j,k,w,h,d);
+      0,m,(char*)&matB,i,j,k,w,h,d);
   //if they are the same, nothing to be done: no cut
   if (matA == matB) return;
   //if they are different, interpolate transition point.
@@ -456,17 +456,29 @@ void FindEdgeCutCUDA(
   float b2 = v2;
   float a2 = CleaverCUDA::GetEdgeMatAndValueAtEndpointCUDA(
       data_,scales,scale,num,false,false,
-      matA,m,&dummy,i,j,k,w,h,d);
+      matA,m,(char*)&dummy,i,j,k,w,h,d);
   float b1 = CleaverCUDA::GetEdgeMatAndValueAtEndpointCUDA(
       data_,scales,scale,num,true,false,
-      matB,m,&dummy,i,j,k,w,h,d);
+      matB,m,(char*)&dummy,i,j,k,w,h,d);
   float top = (a1 - b1);
   float bot = (b2 - a2 + a1 - b1);
   //degenerate cases
   if (bot == 0.) return;
   edge->isCut_eval |= CleaverCUDA::kIsCut;
-  edge->isCut_eval |= ((min(matA,matB)%
-      CleaverCUDA::kMaxMaterials) << CleaverCUDA::kMaterial);
+  matA = matA % kMaxMaterials;
+  matB = matB % kMaxMaterials;
+  unsigned char minMat = min(matA,matB);
+  unsigned char maxMat = max(matA,matB);
+  unsigned char adder = 0;
+  switch(minMat) {
+    case 1: adder = 4; break;
+    case 2: adder = 7; break;
+    case 3: adder = 9; break;
+    case 4: adder = 10; break;
+    default: adder = 0; break;
+  }
+  unsigned char mm = (maxMat - 1 + adder)%16;
+  edge->isCut_eval |= (mm << CleaverCUDA::kMaterial);
   float t = min(max(top/bot,0.f),1.f);
   float edge_verts[2][3];
   CleaverCUDA::GetEdgeVerticesCUDA(num,i,j,k,scale,edge_verts);

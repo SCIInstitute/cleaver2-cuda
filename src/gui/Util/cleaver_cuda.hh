@@ -12,7 +12,7 @@ namespace CleaverCUDA {
  * Simple Edge struct used for CUDA Edges.
  */
 typedef struct Edge {
-  char isCut_eval;  //& 0xf0 for isCut, & 0x0f for eval
+  unsigned char isCut_eval;  //& 0xf0 for isCut, & 0x0f for eval
   float cut_loc[3];
 } Edge;
 
@@ -25,17 +25,17 @@ enum edge_index {
   FL, FR, BL, BR };         // Four Column Edges (22-25)
 
 /** This constant is a mask for geometery evaluation */
-static const char kIsEvaluated = 0x01;
+static const unsigned char kIsEvaluated = 0x01;
 /** This constant is a mask for an edge cut */
-static const char kIsCut = 0x02;
+static const unsigned char kIsCut = 0x02;
 /** This constant is a mask for a tet's stenciling */
-static const char kIsStenciled = 0x04;
+static const unsigned char kIsStenciled = 0x04;
 /** This constant is a mask for if a tet has > 2 cuts. */
-static const char kHasStencil = 0x08;
+static const unsigned char kHasStencil = 0x08;
 /** This constant is a shift for an edge's material */
-static const char kMaterial = 4;
+static const unsigned char kMaterial = 4;
 /** The maximum number of materials allowed (as far as coloring) */
-static const char kMaxMaterials = 16;
+static const unsigned char kMaxMaterials = 6;
 
 
 /** The constant size of a CUDA thread edge */

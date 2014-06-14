@@ -652,14 +652,6 @@ void CleaverUtility::CalculateCuts(SimpleGeometry&  geos) {
           }
         }
       }
-  //  for (size_t tt = 0; tt < 3; tt++)
-  //    for (size_t t = 0; t < geos.GetEdgePointersSize()[tt]; t++)
-  //      if((geos.GetEdgePointers()[tt][t].isCut_eval & CleaverCUDA::kIsCut))
-  //        std::cout << tt << " - " <<t << " : " <<
-  //        (int)geos.GetEdgePointers()[tt][t].isCut_eval
-  //        << " -- " << geos.GetEdgePointers()[tt][t].cut_loc[0] << ", "
-  //        << geos.GetEdgePointers()[tt][t].cut_loc[1] << ", " <<
-  //        geos.GetEdgePointers()[tt][t].cut_loc[2] << "\n";
   double duration = ((double)clock() -
       (double)start) / (double)CLOCKS_PER_SEC;
   if (verbose_)

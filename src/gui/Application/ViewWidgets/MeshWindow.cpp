@@ -1630,19 +1630,25 @@ void MeshWindow::build_output_vbos()
   std::vector<GLfloat> NormalData;
   std::vector<GLubyte> ColorData;
   float colors[][3] = {
-      {0.3f, 1.0f, 0.0f},
-      {1.0f, 0.3f, 0.0f},
-      {0.0f, 0.3f, 1.0f},
-      {0.3f, 1.0f, 1.0f},
-      {1.0f, 0.3f, 1.0f},
-      {1.0f, 1.0f, 0.3f},
+      {0.0f, 1.0f, 0.0f},
+      {1.0f, 0.0f, 0.0f},
+      {0.0f, 0.0f, 1.0f},
+      {0.0f, 1.0f, 1.0f},
+      {1.0f, 0.0f, 1.0f},
+      {1.0f, 1.0f, 0.0f},
+      {1.0f, 1.0f, 1.0f},
+      {0.5f, 0.5f, 0.5f},
 
-      {0.3f, 0.5f, 0.8f},
-      {0.1f, 0.3f, 0.7f},
-      {0.8f, 0.3f, 0.5f},
-      {0.1f, 1.0f, 0.6f},
-      {0.8f, 0.2f, 0.5f},
-      {0.3f, 0.2f, 0.9f}
+
+      {0.0f, 0.5f, 0.0f},
+      {0.5f, 0.0f, 0.0f},
+      {0.0f, 0.0f, 0.5f},
+      {0.0f, 0.5f, 0.5f},
+      {0.5f, 0.0f, 0.5f},
+      {0.5f, 0.5f, 0.0f},
+      {1.0f, 0.6f, 0.0f},
+
+      {1.0f, 0.9f, 1.0f}
   };
   if(m_mesh) {
     for(int f=0; f < m_mesh->faces.size(); f++)
@@ -1852,7 +1858,7 @@ void MeshWindow::build_output_vbos()
     for (size_t i = 0; i < faces_.size(); i++) {
       float col[3]    = {0,0,0};
       for(size_t c = 0; c < 3; c++)
-        col[c] = colors[faces_[i][3] % 12][c];
+        col[c] = colors[faces_[i][3] % 16][c];
       bool clipped = false;
       if(m_bClipping)
       {
